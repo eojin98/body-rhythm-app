@@ -1,7 +1,23 @@
-const SETTINGS_KEY = 'bodyrhythm_settings'
-const RECORDS_KEY = 'bodyrhythm_records'
-const NOTIF_LOG_KEY = 'bodyrhythm_notif_log'
-const SNOOZE_KEY = 'bodyrhythm_snooze'
+const DEVICE_ID_KEY = 'bodyrhythm_device_id'
+
+export function getDeviceId() {
+  let id = localStorage.getItem(DEVICE_ID_KEY)
+  if (!id) {
+    id = 'dev_' + Math.random().toString(36).slice(2, 10) + '_' + Date.now().toString(36)
+    localStorage.setItem(DEVICE_ID_KEY, id)
+  }
+  return id
+}
+
+function keys() {
+  const id = getDeviceId()
+  return {
+    settings: `${id}_settings`,
+    records: `${id}_records`,
+    notifLog: `${id}_notif_log`,
+    snooze: `${id}_snooze`,
+  }
+}
 
 const DAY_NAMES = ['일', '월', '화', '수', '목', '금', '토']
 
@@ -23,7 +39,7 @@ const DEFAULT_SETTINGS = {
 
 export function getSettings() {
   try {
-    const data = localStorage.getItem(SETTINGS_KEY)
+    const data = localStorage.getItem(keys().settings)
     if (!data) return { ...DEFAULT_SETTINGS, alarms: [...DEFAULT_ALARMS] }
     const saved = JSON.parse(data)
     // Migrate old food-based alarms to new behavior-based alarms
@@ -38,12 +54,12 @@ export function getSettings() {
 }
 
 export function saveSettings(settings) {
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings))
+  localStorage.setItem(keys().settings, JSON.stringify(settings))
 }
 
 export function getRecords() {
   try {
-    const data = localStorage.getItem(RECORDS_KEY)
+    const data = localStorage.getItem(keys().records)
     return data ? JSON.parse(data) : {}
   } catch {
     return {}
@@ -53,7 +69,7 @@ export function getRecords() {
 export function saveRecord(date, record) {
   const records = getRecords()
   records[date] = { ...records[date], ...record }
-  localStorage.setItem(RECORDS_KEY, JSON.stringify(records))
+  localStorage.setItem(keys().records, JSON.stringify(records))
 }
 
 export function getRecord(date) {
@@ -105,7 +121,7 @@ export function getLastWeekDates() {
 
 export function getNotifLog() {
   try {
-    const data = localStorage.getItem(NOTIF_LOG_KEY)
+    const data = localStorage.getItem(keys().notifLog)
     return data ? JSON.parse(data) : {}
   } catch {
     return {}
@@ -116,12 +132,12 @@ export function markNotifFired(alarmId, minuteKey) {
   const log = getNotifLog()
   log[`${alarmId}_${minuteKey}`] = true
   // Keep log small - only last 100 entries
-  const keys = Object.keys(log)
-  if (keys.length > 100) {
-    const toDelete = keys.slice(0, keys.length - 100)
+  const logKeys = Object.keys(log)
+  if (logKeys.length > 100) {
+    const toDelete = logKeys.slice(0, logKeys.length - 100)
     toDelete.forEach(k => delete log[k])
   }
-  localStorage.setItem(NOTIF_LOG_KEY, JSON.stringify(log))
+  localStorage.setItem(keys().notifLog, JSON.stringify(log))
 }
 
 export function wasNotifFired(alarmId, minuteKey) {
@@ -190,14 +206,14 @@ export function saveRoutineAction(dateKey, periodId, status) {
       [periodId]: { status, updatedAt: new Date().toISOString() },
     },
   }
-  localStorage.setItem(RECORDS_KEY, JSON.stringify(records))
+  localStorage.setItem(keys().records, JSON.stringify(records))
 }
 
 // --- Snooze state (나중에 — temporary, not stored in daily records) ---
 
 export function getSnooze(periodId) {
   try {
-    const data = JSON.parse(localStorage.getItem(SNOOZE_KEY) || '{}')
+    const data = JSON.parse(localStorage.getItem(keys().snooze) || '{}')
     return data[periodId] || null
   } catch {
     return null
@@ -206,9 +222,9 @@ export function getSnooze(periodId) {
 
 export function setSnooze(periodId, untilMs) {
   try {
-    const data = JSON.parse(localStorage.getItem(SNOOZE_KEY) || '{}')
+    const data = JSON.parse(localStorage.getItem(keys().snooze) || '{}')
     data[periodId] = untilMs
-    localStorage.setItem(SNOOZE_KEY, JSON.stringify(data))
+    localStorage.setItem(keys().snooze, JSON.stringify(data))
   } catch {}
 }
 

@@ -11,6 +11,7 @@ export default function Onboarding({ onComplete }) {
   const [permStatus, setPermStatus] = useState('default')
 
   const next = () => setStep(s => s + 1)
+  const prev = () => setStep(s => s - 1)
 
   const handlePermission = async () => {
     const result = await requestNotificationPermission()
@@ -39,10 +40,10 @@ export default function Onboarding({ onComplete }) {
   return (
     <div className="onboarding-page">
       {step === 0 && <WelcomeStep onNext={next} />}
-      {step === 1 && <WakeTimeStep value={wakeTime} onChange={setWakeTime} onNext={next} />}
-      {step === 2 && <SleepTimeStep value={sleepTime} onChange={setSleepTime} onNext={next} />}
-      {step === 3 && <NotifStep status={permStatus} onRequest={handlePermission} onSkip={next} />}
-      {step === 4 && <DoneStep wakeTime={wakeTime} sleepTime={sleepTime} onComplete={handleComplete} />}
+      {step === 1 && <WakeTimeStep value={wakeTime} onChange={setWakeTime} onNext={next} onBack={prev} />}
+      {step === 2 && <SleepTimeStep value={sleepTime} onChange={setSleepTime} onNext={next} onBack={prev} />}
+      {step === 3 && <NotifStep status={permStatus} onRequest={handlePermission} onSkip={next} onBack={prev} />}
+      {step === 4 && <DoneStep wakeTime={wakeTime} sleepTime={sleepTime} onComplete={handleComplete} onBack={prev} />}
     </div>
   )
 }
@@ -101,10 +102,11 @@ function WelcomeStep({ onNext }) {
   )
 }
 
-function WakeTimeStep({ value, onChange, onNext }) {
+function WakeTimeStep({ value, onChange, onNext, onBack }) {
   return (
     <>
       <div className="onboarding-hero">
+        <button className="onboarding-back-btn" onClick={onBack}>‹</button>
         <div style={{ fontSize: 56, marginBottom: 14 }}>🌅</div>
         <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>기상 시간</h2>
         <p style={{ fontSize: 15, opacity: 0.85 }}>보통 몇 시에 일어나시나요?</p>
@@ -132,10 +134,11 @@ function WakeTimeStep({ value, onChange, onNext }) {
   )
 }
 
-function SleepTimeStep({ value, onChange, onNext }) {
+function SleepTimeStep({ value, onChange, onNext, onBack }) {
   return (
     <>
       <div className="onboarding-hero">
+        <button className="onboarding-back-btn" onClick={onBack}>‹</button>
         <div style={{ fontSize: 56, marginBottom: 14 }}>🌙</div>
         <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>취침 시간</h2>
         <p style={{ fontSize: 15, opacity: 0.85 }}>보통 몇 시에 주무시나요?</p>
@@ -163,10 +166,11 @@ function SleepTimeStep({ value, onChange, onNext }) {
   )
 }
 
-function NotifStep({ status, onRequest, onSkip }) {
+function NotifStep({ status, onRequest, onSkip, onBack }) {
   return (
     <>
       <div className="onboarding-hero">
+        <button className="onboarding-back-btn" onClick={onBack}>‹</button>
         <div style={{ fontSize: 56, marginBottom: 14 }}>🔔</div>
         <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>알림 권한</h2>
         <p style={{ fontSize: 15, opacity: 0.85 }}>알람을 받으려면 알림을 허용해주세요</p>
@@ -210,7 +214,7 @@ function NotifStep({ status, onRequest, onSkip }) {
   )
 }
 
-function DoneStep({ wakeTime, sleepTime, onComplete }) {
+function DoneStep({ wakeTime, sleepTime, onComplete, onBack }) {
   const fmt = (t) => {
     const [h, m] = t.split(':').map(Number)
     const p = h < 12 ? '오전' : '오후'
@@ -220,6 +224,7 @@ function DoneStep({ wakeTime, sleepTime, onComplete }) {
   return (
     <>
       <div className="onboarding-hero">
+        <button className="onboarding-back-btn" onClick={onBack}>‹</button>
         <div style={{ fontSize: 64, marginBottom: 16 }}>🎉</div>
         <h2 style={{ fontSize: 24, fontWeight: 800, marginBottom: 10 }}>모두 완료!</h2>
         <p style={{ fontSize: 15, opacity: 0.85 }}>나만의 리듬을 시작해볼까요?</p>

@@ -498,7 +498,26 @@ body {
   align-items: center;
   text-align: center;
   color: white;
+  position: relative;
 }
+.onboarding-back-btn {
+  position: absolute;
+  top: max(14px, env(safe-area-inset-top, 14px));
+  left: 14px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.22);
+  color: white;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+.onboarding-back-btn:active { background: rgba(255,255,255,0.35); }
 .onboarding-body {
   flex: 1;
   padding: 24px 24px;
