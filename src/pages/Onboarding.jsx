@@ -68,16 +68,16 @@ function StepDots({ current, total }) {
 function WelcomeStep({ onNext }) {
   return (
     <>
-      <div className="onboarding-hero" style={{ flex: 1, justifyContent: 'center' }}>
-        <div style={{ fontSize: 72, marginBottom: 20 }}>⏰</div>
-        <h1 style={{ fontSize: 28, fontWeight: 800, marginBottom: 12, letterSpacing: -0.5 }}>
+      <div className="onboarding-hero">
+        <div style={{ fontSize: 64, marginBottom: 16 }}>⏰</div>
+        <h1 style={{ fontSize: 26, fontWeight: 800, marginBottom: 10, letterSpacing: -0.5 }}>
           Body Rhythm
         </h1>
-        <p style={{ fontSize: 16, opacity: 0.85, lineHeight: 1.6, maxWidth: 280 }}>
+        <p style={{ fontSize: 15, opacity: 0.85, lineHeight: 1.6, maxWidth: 280 }}>
           규칙적인 생활 리듬으로<br />더 건강한 하루를 만들어요
         </p>
       </div>
-      <div className="onboarding-body" style={{ justifyContent: 'flex-end' }}>
+      <div className="onboarding-body">
         <div style={{ background: '#F5F4FF', borderRadius: 16, padding: '20px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
           {[
             { icon: '🌅', text: '기상·취침 알람으로 규칙적인 수면' },
@@ -85,12 +85,14 @@ function WelcomeStep({ onNext }) {
             { icon: '📊', text: '실천율 통계로 나의 리듬 확인' },
           ].map(({ icon, text }) => (
             <div key={text} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <span style={{ fontSize: 24 }}>{icon}</span>
+              <span style={{ fontSize: 22 }}>{icon}</span>
               <span style={{ fontSize: 14, color: '#4A4A6A', fontWeight: 500 }}>{text}</span>
             </div>
           ))}
         </div>
         <StepDots current={0} total={5} />
+      </div>
+      <div className="onboarding-footer">
         <button className="btn btn-primary btn-full" onClick={onNext}>
           시작하기
         </button>
@@ -103,11 +105,11 @@ function WakeTimeStep({ value, onChange, onNext }) {
   return (
     <>
       <div className="onboarding-hero">
-        <div style={{ fontSize: 60, marginBottom: 16 }}>🌅</div>
-        <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8 }}>기상 시간</h2>
+        <div style={{ fontSize: 56, marginBottom: 14 }}>🌅</div>
+        <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>기상 시간</h2>
         <p style={{ fontSize: 15, opacity: 0.85 }}>보통 몇 시에 일어나시나요?</p>
       </div>
-      <div className="onboarding-body" style={{ alignItems: 'center' }}>
+      <div className="onboarding-body">
         <div className="card" style={{ width: '100%', padding: '24px 20px', textAlign: 'center' }}>
           <p style={{ fontSize: 13, color: '#6E6E8A', marginBottom: 12, fontWeight: 600 }}>기상 시간</p>
           <input
@@ -122,10 +124,9 @@ function WakeTimeStep({ value, onChange, onNext }) {
           </p>
         </div>
         <StepDots current={1} total={5} />
-        <div style={{ display: 'flex', gap: 12, width: '100%' }}>
-          <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => {}}>이전</button>
-          <button className="btn btn-primary" style={{ flex: 2 }} onClick={onNext}>다음</button>
-        </div>
+      </div>
+      <div className="onboarding-footer">
+        <button className="btn btn-primary btn-full" onClick={onNext}>다음</button>
       </div>
     </>
   )
@@ -135,11 +136,11 @@ function SleepTimeStep({ value, onChange, onNext }) {
   return (
     <>
       <div className="onboarding-hero">
-        <div style={{ fontSize: 60, marginBottom: 16 }}>🌙</div>
-        <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8 }}>취침 시간</h2>
+        <div style={{ fontSize: 56, marginBottom: 14 }}>🌙</div>
+        <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>취침 시간</h2>
         <p style={{ fontSize: 15, opacity: 0.85 }}>보통 몇 시에 주무시나요?</p>
       </div>
-      <div className="onboarding-body" style={{ alignItems: 'center' }}>
+      <div className="onboarding-body">
         <div className="card" style={{ width: '100%', padding: '24px 20px', textAlign: 'center' }}>
           <p style={{ fontSize: 13, color: '#6E6E8A', marginBottom: 12, fontWeight: 600 }}>취침 시간</p>
           <input
@@ -154,6 +155,8 @@ function SleepTimeStep({ value, onChange, onNext }) {
           </p>
         </div>
         <StepDots current={2} total={5} />
+      </div>
+      <div className="onboarding-footer">
         <button className="btn btn-primary btn-full" onClick={onNext}>다음</button>
       </div>
     </>
@@ -164,8 +167,8 @@ function NotifStep({ status, onRequest, onSkip }) {
   return (
     <>
       <div className="onboarding-hero">
-        <div style={{ fontSize: 60, marginBottom: 16 }}>🔔</div>
-        <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8 }}>알림 권한</h2>
+        <div style={{ fontSize: 56, marginBottom: 14 }}>🔔</div>
+        <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>알림 권한</h2>
         <p style={{ fontSize: 15, opacity: 0.85 }}>알람을 받으려면 알림을 허용해주세요</p>
       </div>
       <div className="onboarding-body">
@@ -192,16 +195,16 @@ function NotifStep({ status, onRequest, onSkip }) {
           </div>
         )}
         <StepDots current={3} total={5} />
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {status !== 'granted' && status !== 'denied' && (
-            <button className="btn btn-primary btn-full" onClick={onRequest}>
-              알림 허용하기
-            </button>
-          )}
-          <button className="btn btn-ghost btn-full" onClick={onSkip} style={{ fontSize: 14, color: '#A0A0B8' }}>
-            {status === 'granted' ? '다음으로' : '나중에 설정하기'}
+      </div>
+      <div className="onboarding-footer">
+        {status !== 'granted' && status !== 'denied' && (
+          <button className="btn btn-primary btn-full" onClick={onRequest}>
+            알림 허용하기
           </button>
-        </div>
+        )}
+        <button className="btn btn-ghost btn-full" onClick={onSkip} style={{ fontSize: 14, color: '#A0A0B8' }}>
+          {status === 'granted' ? '다음으로' : '나중에 설정하기'}
+        </button>
       </div>
     </>
   )
@@ -216,12 +219,12 @@ function DoneStep({ wakeTime, sleepTime, onComplete }) {
   }
   return (
     <>
-      <div className="onboarding-hero" style={{ flex: 1, justifyContent: 'center' }}>
-        <div style={{ fontSize: 72, marginBottom: 20 }}>🎉</div>
-        <h2 style={{ fontSize: 26, fontWeight: 800, marginBottom: 12 }}>모두 완료!</h2>
+      <div className="onboarding-hero">
+        <div style={{ fontSize: 64, marginBottom: 16 }}>🎉</div>
+        <h2 style={{ fontSize: 24, fontWeight: 800, marginBottom: 10 }}>모두 완료!</h2>
         <p style={{ fontSize: 15, opacity: 0.85 }}>나만의 리듬을 시작해볼까요?</p>
       </div>
-      <div className="onboarding-body" style={{ justifyContent: 'flex-end' }}>
+      <div className="onboarding-body">
         <div style={{ background: '#F5F4FF', borderRadius: 16, padding: '20px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div className="row-between">
             <span style={{ fontSize: 14, color: '#6E6E8A', fontWeight: 500 }}>기상 알람</span>
@@ -237,6 +240,8 @@ function DoneStep({ wakeTime, sleepTime, onComplete }) {
           </div>
         </div>
         <StepDots current={4} total={5} />
+      </div>
+      <div className="onboarding-footer">
         <button className="btn btn-primary btn-full" onClick={onComplete} style={{ fontSize: 17 }}>
           시작하기
         </button>
