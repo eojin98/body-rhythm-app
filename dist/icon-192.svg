@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6C5CE7"/>
+      <stop offset="100%" stop-color="#a29bfe"/>
+    </linearGradient>
+  </defs>
+  <rect width="192" height="192" rx="40" fill="url(#bg)"/>
+  <!-- Clock circle -->
+  <circle cx="96" cy="90" r="46" fill="none" stroke="white" stroke-width="8" opacity="0.95"/>
+  <!-- Clock hands -->
+  <line x1="96" y1="90" x2="96" y2="60" stroke="white" stroke-width="7" stroke-linecap="round"/>
+  <line x1="96" y1="90" x2="116" y2="102" stroke="white" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="96" cy="90" r="5" fill="white"/>
+  <!-- Bell ears -->
+  <line x1="74" y1="50" x2="64" y2="38" stroke="white" stroke-width="7" stroke-linecap="round"/>
+  <line x1="118" y1="50" x2="128" y2="38" stroke="white" stroke-width="7" stroke-linecap="round"/>
+  <!-- Bell bottom arc -->
+  <path d="M 76 148 Q 96 162 116 148" fill="none" stroke="white" stroke-width="7" stroke-linecap="round"/>
+</svg>

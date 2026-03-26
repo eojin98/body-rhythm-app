@@ -1,7 +1,8 @@
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
+import { Capacitor } from '@capacitor/core'
 import { getSettings } from './utils/storage'
-import { checkAndFireAlarms } from './utils/notifications'
+import { checkAndFireAlarms, syncAllAlarmNotifications } from './utils/notifications'
 import Onboarding from './pages/Onboarding'
 import Home from './pages/Home'
 import MorningCheckin from './pages/MorningCheckin'
@@ -16,20 +17,25 @@ function AppContent() {
   })
 
   useEffect(() => {
-    // Check alarms every 30 seconds
-    const tick = () => {
-      const s = getSettings()
-      if (s.onboardingComplete) checkAndFireAlarms(s.alarms)
-    }
+    const s = getSettings()
+    if (!s.onboardingComplete) return
 
-    tick()
-    const id = setInterval(tick, 30000)
-
-    // Also check on window focus
-    window.addEventListener('focus', tick)
-    return () => {
-      clearInterval(id)
-      window.removeEventListener('focus', tick)
+    if (Capacitor.isNativePlatform()) {
+      // Native: sync scheduled local notifications on startup
+      syncAllAlarmNotifications(s.alarms)
+    } else {
+      // Web/PWA: poll every 30 seconds to fire alarms at the right minute
+      const tick = () => {
+        const settings = getSettings()
+        if (settings.onboardingComplete) checkAndFireAlarms(settings.alarms)
+      }
+      tick()
+      const id = setInterval(tick, 30000)
+      window.addEventListener('focus', tick)
+      return () => {
+        clearInterval(id)
+        window.removeEventListener('focus', tick)
+      }
     }
   }, [])
 

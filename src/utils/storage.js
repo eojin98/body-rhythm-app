@@ -1,18 +1,17 @@
 const SETTINGS_KEY = 'bodyrhythm_settings'
 const RECORDS_KEY = 'bodyrhythm_records'
 const NOTIF_LOG_KEY = 'bodyrhythm_notif_log'
+const SNOOZE_KEY = 'bodyrhythm_snooze'
 
 const DAY_NAMES = ['일', '월', '화', '수', '목', '금', '토']
 
 export { DAY_NAMES }
 
 const DEFAULT_ALARMS = [
-  { id: 1, name: '기상', time: '07:00', days: [0,1,2,3,4,5,6], enabled: true, icon: '🌅' },
-  { id: 2, name: '아침 식사', time: '07:30', days: [0,1,2,3,4,5,6], enabled: true, icon: '🍳' },
-  { id: 3, name: '점심 식사', time: '12:00', days: [0,1,2,3,4,5,6], enabled: true, icon: '🥗' },
-  { id: 4, name: '저녁 식사', time: '18:30', days: [0,1,2,3,4,5,6], enabled: true, icon: '🍚' },
-  { id: 5, name: '운동', time: '19:00', days: [1,2,3,4,5], enabled: true, icon: '💪' },
-  { id: 6, name: '취침 준비', time: '22:30', days: [0,1,2,3,4,5,6], enabled: true, icon: '🌙' },
+  { id: 1, type: 'morning',   name: '아침 루틴', time: '07:30', days: [0,1,2,3,4,5,6], enabled: true, icon: '🌅' },
+  { id: 2, type: 'afternoon', name: '오후 루틴', time: '13:30', days: [0,1,2,3,4,5,6], enabled: true, icon: '☀️' },
+  { id: 3, type: 'evening',   name: '저녁 루틴', time: '18:30', days: [1,2,3,4,5],     enabled: true, icon: '🌆' },
+  { id: 4, type: 'bedtime',   name: '취침 준비', time: '22:30', days: [0,1,2,3,4,5,6], enabled: true, icon: '🌙' },
 ]
 
 const DEFAULT_SETTINGS = {
@@ -27,6 +26,11 @@ export function getSettings() {
     const data = localStorage.getItem(SETTINGS_KEY)
     if (!data) return { ...DEFAULT_SETTINGS, alarms: [...DEFAULT_ALARMS] }
     const saved = JSON.parse(data)
+    // Migrate old food-based alarms to new behavior-based alarms
+    const needsMigration = !saved.alarms?.length || saved.alarms.some(a => !a.type)
+    if (needsMigration) {
+      return { ...DEFAULT_SETTINGS, ...saved, alarms: [...DEFAULT_ALARMS] }
+    }
     return { ...DEFAULT_SETTINGS, ...saved }
   } catch {
     return { ...DEFAULT_SETTINGS, alarms: [...DEFAULT_ALARMS] }
@@ -69,11 +73,18 @@ export function formatDate(dateStr) {
   return `${y}년 ${Number(m)}월 ${Number(d)}일 (${day})`
 }
 
+// Count a meal as eaten regardless of old format (boolean) or new format ({ skipped, time })
+function isMealEaten(meal) {
+  if (meal == null) return false
+  if (typeof meal === 'boolean') return meal
+  return !meal.skipped
+}
+
 export function calculatePracticeRate(record) {
   if (!record || !record.completed) return 0
   let score = 0
   if (record.wakeOnTime) score += 25
-  const mealCount = [record.meals?.breakfast, record.meals?.lunch, record.meals?.dinner].filter(Boolean).length
+  const mealCount = ['breakfast', 'lunch', 'dinner'].filter(k => isMealEaten(record.meals?.[k])).length
   if (mealCount >= 2) score += 25
   if (record.exercise) score += 25
   if (record.completed) score += 25
@@ -167,6 +178,43 @@ export function formatTime12(time24) {
   return `${period} ${hour}:${String(m).padStart(2, '0')}`
 }
 
+// --- Routine actions (완료/건너뛰기 per period per day) ---
+
+export function saveRoutineAction(dateKey, periodId, status) {
+  const records = getRecords()
+  const record = records[dateKey] || {}
+  records[dateKey] = {
+    ...record,
+    routines: {
+      ...record.routines,
+      [periodId]: { status, updatedAt: new Date().toISOString() },
+    },
+  }
+  localStorage.setItem(RECORDS_KEY, JSON.stringify(records))
+}
+
+// --- Snooze state (나중에 — temporary, not stored in daily records) ---
+
+export function getSnooze(periodId) {
+  try {
+    const data = JSON.parse(localStorage.getItem(SNOOZE_KEY) || '{}')
+    return data[periodId] || null
+  } catch {
+    return null
+  }
+}
+
+export function setSnooze(periodId, untilMs) {
+  try {
+    const data = JSON.parse(localStorage.getItem(SNOOZE_KEY) || '{}')
+    data[periodId] = untilMs
+    localStorage.setItem(SNOOZE_KEY, JSON.stringify(data))
+  } catch {}
+}
+
+// Returns a small sequential integer safe for use as a Capacitor notification ID
 export function generateId() {
-  return Date.now() + Math.floor(Math.random() * 1000)
+  const settings = getSettings()
+  const maxId = Math.max(0, ...settings.alarms.map(a => Number(a.id) || 0))
+  return maxId + 1
 }

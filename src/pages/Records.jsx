@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { getRecords, calculatePracticeRate, DAY_NAMES, getTodayKey } from '../utils/storage'
+import { ALARM_PERIODS, PERIOD_ORDER } from '../utils/alarmContent'
 
 export default function Records() {
   const today = new Date()
@@ -137,8 +138,6 @@ function RecordDetail({ record }) {
     return `${p} ${hh}:${String(m).padStart(2, '0')}`
   }
 
-  const mealCount = [record.meals?.breakfast, record.meals?.lunch, record.meals?.dinner].filter(Boolean).length
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {/* Rate */}
@@ -152,58 +151,70 @@ function RecordDetail({ record }) {
           {rate}%
         </div>
         <div>
-          <div style={{ fontSize: 15, fontWeight: 600 }}>오늘 실천율</div>
+          <div style={{ fontSize: 15, fontWeight: 600 }}>실천율</div>
           <div style={{ fontSize: 13, color: '#A0A0B8', marginTop: 2 }}>
             {rate === 100 ? '완벽한 하루!' : rate >= 75 ? '좋은 하루!' : rate >= 50 ? '괜찮은 하루' : '더 노력해요'}
           </div>
         </div>
       </div>
 
-      {/* Sleep */}
+      {/* Routine completions */}
       <div className="card card-body">
-        <div style={{ fontSize: 13, fontWeight: 600, color: '#6E6E8A', marginBottom: 12 }}>수면</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-          <Stat label="취침" value={fmt(record.sleepTime)} />
-          <Stat label="기상" value={fmt(record.wakeTime)} color={record.wakeOnTime ? '#00B894' : '#FF7675'} />
-          <Stat label="수면" value={`${record.sleepHours || 0}h`} />
+        <div style={{ fontSize: 13, fontWeight: 600, color: '#6E6E8A', marginBottom: 12 }}>루틴 실천</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {PERIOD_ORDER.map(pid => {
+            const p = ALARM_PERIODS[pid]
+            const status = record.routines?.[pid]?.status || null
+            return (
+              <div key={pid} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{
+                  width: 32, height: 32, borderRadius: 10, flexShrink: 0,
+                  background: p.gradient,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16,
+                }}>
+                  {p.icon}
+                </div>
+                <div style={{ flex: 1, fontSize: 14, fontWeight: 500 }}>{p.name}</div>
+                <div style={{
+                  fontSize: 12, fontWeight: 600, padding: '3px 10px', borderRadius: 20,
+                  background: status === 'done' ? '#E6FBF5' : status === 'skipped' ? '#FFF8E6' : '#F5F5F5',
+                  color: status === 'done' ? '#00B894' : status === 'skipped' ? '#E67E22' : '#CCC',
+                }}>
+                  {status === 'done' ? '✅ 완료' : status === 'skipped' ? '⏭ 건너뜀' : '— 기록 없음'}
+                </div>
+              </div>
+            )
+          })}
         </div>
-        {record.sleepQuality > 0 && (
-          <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
-            <span style={{ fontSize: 12, color: '#A0A0B8' }}>수면 질:</span>
-            <span style={{ fontSize: 14 }}>{'⭐'.repeat(record.sleepQuality)}</span>
+      </div>
+
+      {/* Sleep (only if checkin completed) */}
+      {record.completed && (
+        <div className="card card-body">
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#6E6E8A', marginBottom: 12 }}>수면 (모닝 체크인)</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+            <Stat label="취침" value={fmt(record.sleepTime)} />
+            <Stat label="기상" value={fmt(record.wakeTime)} color={record.wakeOnTime ? '#00B894' : '#FF7675'} />
+            <Stat label="수면" value={`${record.sleepHours || 0}h`} />
           </div>
-        )}
-      </div>
-
-      {/* Meals */}
-      <div className="card card-body">
-        <div style={{ fontSize: 13, fontWeight: 600, color: '#6E6E8A', marginBottom: 12 }}>식사</div>
-        <div style={{ display: 'flex', gap: 10 }}>
-          {[['breakfast', '🍳', '아침'], ['lunch', '🥗', '점심'], ['dinner', '🍚', '저녁']].map(([key, icon, label]) => (
-            <div key={key} style={{
-              flex: 1, textAlign: 'center', padding: '12px 8px', borderRadius: 12,
-              background: record.meals?.[key] ? '#E6FBF5' : '#F5F5F5',
-            }}>
-              <div style={{ fontSize: 22, opacity: record.meals?.[key] ? 1 : 0.3 }}>{icon}</div>
-              <div style={{ fontSize: 11, color: record.meals?.[key] ? '#00B894' : '#CCC', fontWeight: 600, marginTop: 4 }}>{label}</div>
+          {record.sleepQuality > 0 && (
+            <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ fontSize: 12, color: '#A0A0B8' }}>수면 질:</span>
+              <span style={{ fontSize: 14 }}>{'⭐'.repeat(record.sleepQuality)}</span>
             </div>
-          ))}
-        </div>
-        <div style={{ marginTop: 8, fontSize: 12, color: '#A0A0B8', textAlign: 'center' }}>
-          {mealCount}끼 식사
-        </div>
-      </div>
-
-      {/* Exercise */}
-      <div className="card card-body" style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-        <div style={{ fontSize: 36 }}>{record.exercise ? '💪' : '🛋️'}</div>
-        <div>
-          <div style={{ fontSize: 15, fontWeight: 600 }}>{record.exercise ? '운동 완료' : '운동 없음'}</div>
-          {record.exercise && record.exerciseMinutes > 0 && (
-            <div style={{ fontSize: 13, color: '#00B894', fontWeight: 600 }}>{record.exerciseMinutes}분</div>
+          )}
+          {record.exercise && (
+            <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 20 }}>💪</span>
+              <span style={{ fontSize: 13, color: '#00B894', fontWeight: 600 }}>
+                운동 완료
+                {record.exerciseDuration ? ` · ${record.exerciseDuration}` : ''}
+                {record.exerciseStart ? ` (${fmt(record.exerciseStart)} 시작)` : ''}
+              </span>
+            </div>
           )}
         </div>
-      </div>
+      )}
     </div>
   )
 }

@@ -1,39 +1,94 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Capacitor } from '@capacitor/core'
 import {
   getSettings, saveSettings, getRecord, getTodayKey,
   calculatePracticeRate, getNextAlarm, timeUntil,
-  formatTime12, DAY_NAMES
+  formatTime12, DAY_NAMES,
+  saveRoutineAction, getSnooze, setSnooze,
 } from '../utils/storage'
-import { getPermissionStatus } from '../utils/notifications'
+import {
+  getPermissionStatus,
+  checkPermissionStatusAsync,
+  scheduleAlarmNotifications,
+  scheduleSnoozeNotification,
+} from '../utils/notifications'
+import { ALARM_PERIODS } from '../utils/alarmContent'
 import ProgressRing from '../components/ProgressRing'
+
+// Find the most recently triggered alarm that hasn't been acted on
+function getActiveRoutineAlarm(alarms, todayRoutines) {
+  const now = new Date()
+  const nowMins = now.getHours() * 60 + now.getMinutes()
+  const todayDay = now.getDay()
+
+  return alarms
+    .filter(a => a.enabled && a.type && a.days.includes(todayDay))
+    .map(a => {
+      const [h, m] = a.time.split(':').map(Number)
+      return { ...a, diffMins: nowMins - (h * 60 + m) }
+    })
+    .filter(a => a.diffMins >= 0 && a.diffMins <= 120)
+    .filter(a => {
+      const routine = todayRoutines?.[a.type]
+      if (routine?.status === 'done' || routine?.status === 'skipped') return false
+      const snoozeUntil = getSnooze(a.type)
+      if (snoozeUntil && Date.now() < snoozeUntil) return false
+      return true
+    })
+    .sort((a, b) => a.diffMins - b.diffMins)[0] || null
+}
 
 export default function Home() {
   const navigate = useNavigate()
   const [settings, setSettings] = useState(getSettings)
   const [todayRecord, setTodayRecord] = useState(() => getRecord(getTodayKey()))
   const [now, setNow] = useState(new Date())
+  const [notifStatus, setNotifStatus] = useState(getPermissionStatus)
+  const [activeAlarm, setActiveAlarm] = useState(null)
 
   useEffect(() => {
-    const id = setInterval(() => {
+    checkPermissionStatusAsync().then(setNotifStatus)
+    const tick = () => {
       setNow(new Date())
-      setTodayRecord(getRecord(getTodayKey()))
-    }, 30000)
+      const rec = getRecord(getTodayKey())
+      setTodayRecord(rec)
+      const s = getSettings()
+      setActiveAlarm(getActiveRoutineAlarm(s.alarms, rec?.routines))
+    }
+    tick()
+    const id = setInterval(tick, 30000)
     return () => clearInterval(id)
   }, [])
 
-  const toggleAlarm = (id) => {
+  const toggleAlarm = async (id) => {
     const updated = {
       ...settings,
-      alarms: settings.alarms.map(a => a.id === id ? { ...a, enabled: !a.enabled } : a)
+      alarms: settings.alarms.map(a => a.id === id ? { ...a, enabled: !a.enabled } : a),
     }
     saveSettings(updated)
     setSettings(updated)
+    const alarm = updated.alarms.find(a => a.id === id)
+    if (alarm) await scheduleAlarmNotifications(alarm)
+  }
+
+  const handleRoutineAction = (periodId, action) => {
+    const today = getTodayKey()
+    if (action === 'done' || action === 'skipped') {
+      saveRoutineAction(today, periodId, action)
+    } else if (action === 'snooze') {
+      const snoozeMs = Date.now() + 30 * 60 * 1000
+      setSnooze(periodId, snoozeMs)
+      const alarm = settings.alarms.find(a => a.type === periodId)
+      if (alarm) scheduleSnoozeNotification(alarm)
+    }
+    const rec = getRecord(today)
+    setTodayRecord(rec)
+    setActiveAlarm(getActiveRoutineAlarm(settings.alarms, rec?.routines))
   }
 
   const practiceRate = calculatePracticeRate(todayRecord)
   const nextAlarm = getNextAlarm(settings.alarms)
-  const notifStatus = getPermissionStatus()
 
   const greetings = () => {
     const h = now.getHours()
@@ -53,7 +108,6 @@ export default function Home() {
     return h >= 5 && h < 14 && !todayRecord?.completed
   })()
 
-  // Sort alarms by time, mark past ones
   const todayAlarms = settings.alarms
     .filter(a => a.days.includes(now.getDay()))
     .map(a => {
@@ -81,10 +135,21 @@ export default function Home() {
       </div>
 
       {/* Notification warning */}
-      {notifStatus !== 'granted' && (
+      {notifStatus !== 'granted' && notifStatus !== 'unknown' && (
         <div className="notif-banner">
           <span style={{ fontSize: 18 }}>⚠️</span>
-          <span>알림 권한이 없어 알람이 울리지 않을 수 있습니다. 브라우저 설정에서 알림을 허용해주세요.</span>
+          <span>
+            {Capacitor.isNativePlatform()
+              ? '알림 권한이 없어 알람이 울리지 않습니다. 설정 탭에서 허용해주세요.'
+              : '알림 권한이 없어 알람이 울리지 않을 수 있습니다. 브라우저 설정에서 알림을 허용해주세요.'}
+          </span>
+        </div>
+      )}
+
+      {/* Active routine card */}
+      {activeAlarm && (
+        <div className="section">
+          <ActiveRoutineCard alarm={activeAlarm} onAction={handleRoutineAction} />
         </div>
       )}
 
@@ -104,7 +169,7 @@ export default function Home() {
               {todayRecord?.completed ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <ScoreBadge label="기상" done={todayRecord.wakeOnTime} />
-                  <ScoreBadge label="식사" done={[todayRecord.meals?.breakfast, todayRecord.meals?.lunch, todayRecord.meals?.dinner].filter(Boolean).length >= 2} />
+                  <ScoreBadge label="식사" done={['breakfast', 'lunch', 'dinner'].filter(k => { const m = todayRecord.meals?.[k]; return m != null && (typeof m === 'boolean' ? m : !m.skipped) }).length >= 2} />
                   <ScoreBadge label="운동" done={todayRecord.exercise} />
                 </div>
               ) : (
@@ -164,31 +229,115 @@ export default function Home() {
           </div>
         ) : (
           <div className="card">
-            {todayAlarms.map(alarm => (
-              <div key={alarm.id} className={`alarm-item${alarm.past ? ' past' : ''}`}>
-                <div className="alarm-icon-wrap" style={{ background: alarm.past ? '#F0F0F8' : '#EDE9FE' }}>
-                  {alarm.icon}
+            {todayAlarms.map(alarm => {
+              const routineStatus = todayRecord?.routines?.[alarm.type]?.status
+              return (
+                <div key={alarm.id} className={`alarm-item${alarm.past ? ' past' : ''}`}>
+                  <div className="alarm-icon-wrap" style={{ background: alarm.past ? '#F0F0F8' : '#EDE9FE' }}>
+                    {alarm.icon}
+                  </div>
+                  <div className="alarm-info">
+                    <div className="alarm-name">{alarm.name}</div>
+                    <div className="alarm-time">{formatTime12(alarm.time)}</div>
+                    {routineStatus && (
+                      <div className="alarm-days" style={{ color: routineStatus === 'done' ? '#00B894' : '#A0A0B8' }}>
+                        {routineStatus === 'done' ? '✅ 완료' : '⏭ 건너뜀'}
+                      </div>
+                    )}
+                  </div>
+                  <label className="toggle-wrap">
+                    <input
+                      type="checkbox"
+                      checked={alarm.enabled}
+                      onChange={() => toggleAlarm(alarm.id)}
+                    />
+                    <div className="toggle-track" />
+                  </label>
                 </div>
-                <div className="alarm-info">
-                  <div className="alarm-name">{alarm.name}</div>
-                  <div className="alarm-time">{formatTime12(alarm.time)}</div>
-                </div>
-                <label className="toggle-wrap">
-                  <input
-                    type="checkbox"
-                    checked={alarm.enabled}
-                    onChange={() => toggleAlarm(alarm.id)}
-                  />
-                  <div className="toggle-track" />
-                </label>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
     </div>
   )
 }
+
+// ─── Active Routine Card ───────────────────────────────────────────────────────
+
+function ActiveRoutineCard({ alarm, onAction }) {
+  const period = ALARM_PERIODS[alarm.type]
+  if (!period) return null
+
+  return (
+    <div className="card" style={{ overflow: 'hidden' }}>
+      {/* Gradient header */}
+      <div style={{ background: period.gradient, padding: '16px 20px', color: 'white' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 28 }}>{period.icon}</span>
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 700 }}>{period.name}</div>
+            <div style={{ fontSize: 12, opacity: 0.85 }}>
+              {formatTime12(alarm.time)} 알람 · {alarm.diffMins}분 전
+            </div>
+          </div>
+          <div style={{ marginLeft: 'auto', fontSize: 11, opacity: 0.85, background: 'rgba(255,255,255,0.2)', padding: '4px 10px', borderRadius: 20 }}>
+            지금 실천해요!
+          </div>
+        </div>
+      </div>
+
+      {/* Behavior list */}
+      <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {period.behaviors.map((b, i) => (
+          <div key={b.id} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+            <div style={{
+              width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+              background: period.gradient, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'white', fontSize: 12, fontWeight: 700,
+            }}>
+              {i + 1}
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 2 }}>{b.title}</div>
+              <div style={{ fontSize: 12, color: '#6E6E8A', lineHeight: 1.5 }}>{b.desc}</div>
+              <div style={{ fontSize: 11, color: '#A0A0B8', marginTop: 4, padding: '4px 8px', background: '#F5F4FF', borderRadius: 8, display: 'inline-block' }}>
+                💡 {b.tip}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Action buttons */}
+      <div style={{ padding: '0 20px 16px', display: 'flex', gap: 8 }}>
+        <button
+          className="btn btn-ghost btn-sm"
+          style={{ flex: 1, color: '#A0A0B8', background: '#F5F5F5' }}
+          onClick={() => onAction(alarm.type, 'skipped')}
+        >
+          건너뛰기
+        </button>
+        <button
+          className="btn btn-secondary btn-sm"
+          style={{ flex: 1 }}
+          onClick={() => onAction(alarm.type, 'snooze')}
+        >
+          나중에 (30분)
+        </button>
+        <button
+          className="btn btn-primary btn-sm"
+          style={{ flex: 2 }}
+          onClick={() => onAction(alarm.type, 'done')}
+        >
+          완료 ✓
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── helpers ──────────────────────────────────────────────────────────────────
 
 function ScoreBadge({ label, done }) {
   return (

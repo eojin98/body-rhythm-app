@@ -1,0 +1,13 @@
+{
+  "appId": "com.bodyrhythm.alarm",
+  "appName": "Body Rhythm 알람",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "LocalNotifications": {
+      "iconColor": "#6C5CE7"
+    }
+  }
+}

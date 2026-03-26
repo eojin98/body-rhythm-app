@@ -1,17 +1,141 @@
+import { Capacitor } from '@capacitor/core'
+import { LocalNotifications } from '@capacitor/local-notifications'
 import { wasNotifFired, markNotifFired } from './storage'
+import { ALARM_PERIODS } from './alarmContent'
+
+const isNative = () => Capacitor.isNativePlatform()
+
+// Capacitor weekday: 1=Sun, 2=Mon, ..., 7=Sat
+// JS getDay():       0=Sun, 1=Mon, ..., 6=Sat
+// Notification ID: alarmId * 10 + dayIndex (keeps IDs under 2^31 for reasonable alarmId values)
+function toNotifId(alarmId, dayIndex) {
+  return (Number(alarmId) % 10000000) * 10 + dayIndex
+}
+
+function formatTime12(time24) {
+  const [h, m] = time24.split(':').map(Number)
+  const period = h < 12 ? '오전' : '오후'
+  const hour = h === 0 ? 12 : h > 12 ? h - 12 : h
+  return `${period} ${hour}:${String(m).padStart(2, '0')}`
+}
+
+// --- Permission ---
 
 export async function requestNotificationPermission() {
+  if (isNative()) {
+    try {
+      const result = await LocalNotifications.requestPermissions()
+      return result.display === 'granted' ? 'granted' : 'denied'
+    } catch {
+      return 'denied'
+    }
+  }
   if (!('Notification' in window)) return 'unsupported'
   if (Notification.permission === 'granted') return 'granted'
   if (Notification.permission === 'denied') return 'denied'
-  const result = await Notification.requestPermission()
-  return result
+  return await Notification.requestPermission()
 }
 
+// Sync version for initial render (native returns 'unknown' until async check completes)
 export function getPermissionStatus() {
+  if (isNative()) return 'unknown'
   if (!('Notification' in window)) return 'unsupported'
   return Notification.permission
 }
+
+// Async version for accurate status on both platforms
+export async function checkPermissionStatusAsync() {
+  if (isNative()) {
+    try {
+      const result = await LocalNotifications.checkPermissions()
+      return result.display === 'granted' ? 'granted' : result.display
+    } catch {
+      return 'denied'
+    }
+  }
+  return getPermissionStatus()
+}
+
+// --- Native: schedule/cancel local notifications ---
+
+// Build notification title/body from behavior content (if available)
+function buildNotifContent(alarm) {
+  const period = alarm.type ? ALARM_PERIODS[alarm.type] : null
+  if (period) {
+    const actionTitles = period.behaviors.map(b => b.title).join(' · ')
+    return {
+      title: `${period.icon} ${period.name}`,
+      body: `${actionTitles} 시간이에요!`,
+    }
+  }
+  return {
+    title: `${alarm.icon || '⏰'} ${alarm.name}`,
+    body: `${formatTime12(alarm.time)} 알람입니다. 몸의 리듬을 지켜요!`,
+  }
+}
+
+// Schedule repeating weekly notifications for one alarm (one per enabled day)
+export async function scheduleAlarmNotifications(alarm) {
+  if (!isNative()) return
+  await cancelAlarmNotifications(alarm.id, [0, 1, 2, 3, 4, 5, 6])
+  if (!alarm.enabled || alarm.days.length === 0) return
+
+  const [hour, minute] = alarm.time.split(':').map(Number)
+  const { title, body } = buildNotifContent(alarm)
+  const notifications = alarm.days.map(dayIndex => ({
+    id: toNotifId(alarm.id, dayIndex),
+    title,
+    body,
+    schedule: {
+      on: { weekday: dayIndex + 1, hour, minute },
+      repeats: true,
+      allowWhileIdle: true,
+    },
+  }))
+
+  await LocalNotifications.schedule({ notifications })
+}
+
+// Schedule a one-time snooze notification 30 minutes from now (native only)
+export async function scheduleSnoozeNotification(alarm) {
+  if (!isNative()) return
+  const { title, body } = buildNotifContent(alarm)
+  const snoozeId = toNotifId(alarm.id, 8) // slot 8 = snooze
+  try {
+    await LocalNotifications.cancel({ notifications: [{ id: snoozeId }] })
+  } catch {}
+  await LocalNotifications.schedule({
+    notifications: [{
+      id: snoozeId,
+      title,
+      body,
+      schedule: {
+        at: new Date(Date.now() + 30 * 60 * 1000),
+        allowWhileIdle: true,
+      },
+    }],
+  })
+}
+
+export async function cancelAlarmNotifications(alarmId, days = [0, 1, 2, 3, 4, 5, 6]) {
+  if (!isNative()) return
+  const notifications = days.map(d => ({ id: toNotifId(alarmId, d) }))
+  try {
+    await LocalNotifications.cancel({ notifications })
+  } catch {
+    // ignore: notification may not have been scheduled yet
+  }
+}
+
+// Re-sync all alarms on app start (native only)
+export async function syncAllAlarmNotifications(alarms) {
+  if (!isNative()) return
+  for (const alarm of alarms) {
+    await scheduleAlarmNotifications(alarm)
+  }
+}
+
+// --- Web fallback: immediate notification ---
 
 export function showNotification(title, body) {
   if (Notification.permission !== 'granted') return
@@ -33,8 +157,9 @@ export function showNotification(title, body) {
   }
 }
 
+// Web-only polling: called every 30s to fire alarms at the right minute
 export function checkAndFireAlarms(alarms) {
-  if (!alarms || Notification.permission !== 'granted') return
+  if (isNative() || !alarms || Notification.permission !== 'granted') return
 
   const now = new Date()
   const hh = String(now.getHours()).padStart(2, '0')
@@ -50,13 +175,7 @@ export function checkAndFireAlarms(alarms) {
     if (wasNotifFired(alarm.id, minuteKey)) return
 
     markNotifFired(alarm.id, minuteKey)
-    showNotification(`${alarm.icon || '⏰'} ${alarm.name}`, `${formatTime12(alarm.time)} 알람입니다. 몸의 리듬을 지켜요!`)
+    const { title, body } = buildNotifContent(alarm)
+    showNotification(title, body)
   })
-}
-
-function formatTime12(time24) {
-  const [h, m] = time24.split(':').map(Number)
-  const period = h < 12 ? '오전' : '오후'
-  const hour = h === 0 ? 12 : h > 12 ? h - 12 : h
-  return `${period} ${hour}:${String(m).padStart(2, '0')}`
 }
