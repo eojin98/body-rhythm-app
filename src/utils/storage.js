@@ -1,3 +1,5 @@
+export const APP_VERSION = '1.1.0'
+
 const DEVICE_ID_KEY = 'bodyrhythm_device_id'
 
 export function getDeviceId() {
@@ -35,6 +37,17 @@ const DEFAULT_SETTINGS = {
   wakeTime: '07:00',
   sleepTime: '23:00',
   alarms: DEFAULT_ALARMS,
+  behaviors: {},
+  appVersion: APP_VERSION,
+}
+
+function migrateSettings(settings) {
+  if (settings.appVersion === APP_VERSION) return settings
+  return {
+    ...settings,
+    behaviors: settings.behaviors || {},
+    appVersion: APP_VERSION,
+  }
 }
 
 export function getSettings() {
@@ -43,11 +56,15 @@ export function getSettings() {
     if (!data) return { ...DEFAULT_SETTINGS, alarms: [...DEFAULT_ALARMS] }
     const saved = JSON.parse(data)
     // Migrate old food-based alarms to new behavior-based alarms
-    const needsMigration = !saved.alarms?.length || saved.alarms.some(a => !a.type)
-    if (needsMigration) {
-      return { ...DEFAULT_SETTINGS, ...saved, alarms: [...DEFAULT_ALARMS] }
+    const needsAlarmMigration = !saved.alarms?.length || saved.alarms.some(a => !a.type)
+    if (needsAlarmMigration) {
+      const migrated = { ...DEFAULT_SETTINGS, ...saved, alarms: [...DEFAULT_ALARMS] }
+      saveSettings(migrated)
+      return migrated
     }
-    return { ...DEFAULT_SETTINGS, ...saved }
+    const migrated = migrateSettings(saved)
+    if (migrated !== saved) saveSettings(migrated)
+    return { ...DEFAULT_SETTINGS, ...migrated }
   } catch {
     return { ...DEFAULT_SETTINGS, alarms: [...DEFAULT_ALARMS] }
   }

@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react'
 import { Capacitor } from '@capacitor/core'
-import { getSettings, saveSettings, DAY_NAMES } from '../utils/storage'
+import { getSettings, saveSettings, DAY_NAMES, APP_VERSION } from '../utils/storage'
 import {
   requestNotificationPermission,
   getPermissionStatus,
   checkPermissionStatusAsync,
   scheduleAlarmNotifications,
 } from '../utils/notifications'
-import { ALARM_PERIODS, PERIOD_ORDER } from '../utils/alarmContent'
+import { ALARM_PERIODS, PERIOD_ORDER, getEffectiveBehaviors } from '../utils/alarmContent'
 
 export default function Settings() {
   const [settings, setSettings] = useState(getSettings)
@@ -35,6 +35,19 @@ export default function Settings() {
   const handleRequestNotif = async () => {
     const result = await requestNotificationPermission()
     setNotifStatus(result)
+  }
+
+  const handleBehaviorChange = (periodId, behaviors) => {
+    persistSettings({
+      ...settings,
+      behaviors: { ...(settings.behaviors || {}), [periodId]: behaviors },
+    })
+  }
+
+  const handleBehaviorReset = (periodId) => {
+    const next = { ...(settings.behaviors || {}) }
+    delete next[periodId]
+    persistSettings({ ...settings, behaviors: next })
   }
 
   return (
@@ -84,9 +97,28 @@ export default function Settings() {
                 period={period}
                 alarm={alarm}
                 onChange={(patch) => updateAlarm(periodId, patch)}
+                behaviors={getEffectiveBehaviors(periodId, settings.behaviors)}
               />
             )
           })}
+        </div>
+      </div>
+
+      {/* Behavior editor */}
+      <div className="section">
+        <div className="section-title">행동양식 편집</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {PERIOD_ORDER.map(periodId => (
+            <BehaviorEditorCard
+              key={periodId}
+              periodId={periodId}
+              period={ALARM_PERIODS[periodId]}
+              behaviors={getEffectiveBehaviors(periodId, settings.behaviors)}
+              isCustomized={!!settings.behaviors?.[periodId]}
+              onChange={(behaviors) => handleBehaviorChange(periodId, behaviors)}
+              onReset={() => handleBehaviorReset(periodId)}
+            />
+          ))}
         </div>
       </div>
 
@@ -94,7 +126,7 @@ export default function Settings() {
       <div className="section" style={{ paddingBottom: 20 }}>
         <div className="section-title">앱 정보</div>
         <div className="card card-body" style={{ color: '#A0A0B8', fontSize: 13, lineHeight: 2 }}>
-          <div className="row-between"><span>버전</span><span>1.0.0</span></div>
+          <div className="row-between"><span>버전</span><span>{APP_VERSION}</span></div>
           <div className="row-between"><span>데이터 저장</span><span>기기 로컬</span></div>
           <div className="row-between"><span>알람 방식</span><span>{Capacitor.isNativePlatform() ? '로컬 알림 (앱)' : '브라우저 알림'}</span></div>
         </div>
@@ -105,7 +137,7 @@ export default function Settings() {
 
 // ─── 시간대 알람 카드 ──────────────────────────────────────────────────────────
 
-function AlarmPeriodCard({ period, alarm, onChange }) {
+function AlarmPeriodCard({ period, alarm, onChange, behaviors }) {
   const [expanded, setExpanded] = useState(false)
 
   const toggleDay = (d) => {
@@ -212,7 +244,7 @@ function AlarmPeriodCard({ period, alarm, onChange }) {
           <div>
             <div className="input-label" style={{ marginBottom: 8 }}>알람 내용</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {period.behaviors.map(b => (
+              {behaviors.map(b => (
                 <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: '#F5F4FF', borderRadius: 10 }}>
                   <span style={{ fontSize: 13, fontWeight: 600, color: '#6C5CE7' }}>{b.title}</span>
                   <span style={{ fontSize: 12, color: '#A0A0B8' }}>— {b.desc}</span>
@@ -220,6 +252,137 @@ function AlarmPeriodCard({ period, alarm, onChange }) {
               ))}
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── 행동양식 편집 카드 ────────────────────────────────────────────────────────
+
+function BehaviorEditorCard({ periodId, period, behaviors, isCustomized, onChange, onReset }) {
+  const [expanded, setExpanded] = useState(false)
+  const [editingIdx, setEditingIdx] = useState(null)
+
+  const handleChange = (idx, field, value) => {
+    onChange(behaviors.map((b, i) => i === idx ? { ...b, [field]: value } : b))
+  }
+
+  const handleDelete = (idx) => {
+    onChange(behaviors.filter((_, i) => i !== idx))
+    if (editingIdx === idx) setEditingIdx(null)
+  }
+
+  const handleAdd = () => {
+    onChange([...behaviors, { id: `b_${Date.now()}`, title: '', desc: '', tip: '' }])
+    setEditingIdx(behaviors.length)
+  }
+
+  return (
+    <div className="card">
+      <div
+        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 20px', cursor: 'pointer' }}
+        onClick={() => setExpanded(e => !e)}
+      >
+        <div style={{ width: 40, height: 40, borderRadius: 12, background: period.gradient, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>
+          {period.icon}
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 14, fontWeight: 600 }}>{period.name}</div>
+          <div style={{ fontSize: 12, color: '#A0A0B8', marginTop: 1 }}>{behaviors.length}개 행동</div>
+        </div>
+        {isCustomized && (
+          <span style={{ fontSize: 11, color: '#6C5CE7', background: '#EDE9FE', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>편집됨</span>
+        )}
+        <span style={{ color: '#A0A0B8', fontSize: 13, marginLeft: 4, display: 'inline-block', transform: expanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }}>›</span>
+      </div>
+
+      {expanded && (
+        <div style={{ borderTop: '1px solid #F0EFF8', padding: '12px 20px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {behaviors.map((b, idx) => (
+            <div
+              key={b.id || idx}
+              style={{
+                background: editingIdx === idx ? '#F5F4FF' : '#FAFAFA',
+                borderRadius: 12,
+                padding: '12px 14px',
+                border: editingIdx === idx ? '1.5px solid #6C5CE7' : '1px solid #F0EFF8',
+              }}
+            >
+              {editingIdx === idx ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <input
+                    className="input"
+                    placeholder="제목 (예: 햇빛 보기)"
+                    value={b.title}
+                    onChange={e => handleChange(idx, 'title', e.target.value)}
+                    style={{ fontSize: 14, fontWeight: 600 }}
+                  />
+                  <input
+                    className="input"
+                    placeholder="설명 (예: 아침 햇빛이 생체시계를 조절합니다)"
+                    value={b.desc}
+                    onChange={e => handleChange(idx, 'desc', e.target.value)}
+                    style={{ fontSize: 13 }}
+                  />
+                  <input
+                    className="input"
+                    placeholder="팁 (예: 커튼을 열거나 베란다에 나가보세요)"
+                    value={b.tip}
+                    onChange={e => handleChange(idx, 'tip', e.target.value)}
+                    style={{ fontSize: 12 }}
+                  />
+                  <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', marginTop: 4 }}>
+                    <button
+                      className="btn btn-sm"
+                      style={{ background: '#FFE8E8', color: '#FF7675', fontWeight: 600 }}
+                      onClick={() => handleDelete(idx)}
+                    >
+                      삭제
+                    </button>
+                    <button
+                      className="btn btn-sm btn-primary"
+                      onClick={() => setEditingIdx(null)}
+                    >
+                      완료
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: '#1E1E2E' }}>{b.title || '(제목 없음)'}</div>
+                    {b.desc ? <div style={{ fontSize: 12, color: '#6E6E8A', marginTop: 2 }}>{b.desc}</div> : null}
+                    {b.tip ? <div style={{ fontSize: 11, color: '#A0A0B8', marginTop: 3 }}>💡 {b.tip}</div> : null}
+                  </div>
+                  <button
+                    style={{ background: 'none', border: 'none', color: '#6C5CE7', cursor: 'pointer', fontSize: 13, fontWeight: 600, padding: '2px 4px', flexShrink: 0 }}
+                    onClick={() => setEditingIdx(idx)}
+                  >
+                    편집
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+
+          <button
+            className="btn btn-sm"
+            style={{ background: '#F5F4FF', color: '#6C5CE7', fontWeight: 600, marginTop: 4 }}
+            onClick={handleAdd}
+          >
+            + 행동 추가
+          </button>
+
+          {isCustomized && (
+            <button
+              className="btn btn-sm"
+              style={{ background: '#FFF8E6', color: '#E67E22', fontWeight: 600 }}
+              onClick={() => { onReset(); setEditingIdx(null) }}
+            >
+              기본값으로 초기화
+            </button>
+          )}
         </div>
       )}
     </div>

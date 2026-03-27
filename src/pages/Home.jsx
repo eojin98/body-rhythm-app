@@ -13,7 +13,7 @@ import {
   scheduleAlarmNotifications,
   scheduleSnoozeNotification,
 } from '../utils/notifications'
-import { ALARM_PERIODS } from '../utils/alarmContent'
+import { ALARM_PERIODS, getEffectiveBehaviors } from '../utils/alarmContent'
 import ProgressRing from '../components/ProgressRing'
 
 // Find the most recently triggered alarm that hasn't been acted on
@@ -146,7 +146,11 @@ export default function Home() {
       {/* Active routine card */}
       {activeAlarm && (
         <div className="section">
-          <ActiveRoutineCard alarm={activeAlarm} onAction={handleRoutineAction} />
+          <ActiveRoutineCard
+            alarm={activeAlarm}
+            onAction={handleRoutineAction}
+            behaviors={getEffectiveBehaviors(activeAlarm.type, settings.behaviors)}
+          />
         </div>
       )}
 
@@ -187,40 +191,46 @@ export default function Home() {
       {nextAlarm && (() => {
         const period = ALARM_PERIODS[nextAlarm.type]
         const gradient = period?.gradient || 'linear-gradient(135deg, #6C5CE7 0%, #a29bfe 100%)'
+        const isDark = period?.darkText
+        const txt = isDark ? '#1E1E2E' : 'white'
+        const txtSub = isDark ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.8)'
+        const divider = isDark ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.25)'
+        const numBg = isDark ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.25)'
         const until = timeUntil(nextAlarm.time, nextAlarm.daysFromNow)
+        const behaviors = getEffectiveBehaviors(nextAlarm.type, settings.behaviors)
         return (
           <div className="section">
             <div className="section-title">다음 루틴</div>
-            <div className="card card-body" style={{ background: gradient, color: 'white', gap: 0 }}>
+            <div className="card card-body" style={{ background: gradient, color: txt, gap: 0 }}>
               {/* Time row */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
                 <div>
-                  <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 3 }}>
+                  <div style={{ fontSize: 12, color: txtSub, marginBottom: 3 }}>
                     {nextAlarm.daysFromNow === 0 ? '오늘' : nextAlarm.daysFromNow === 1 ? '내일' : `${nextAlarm.daysFromNow}일 후`}
                     {until && ` · ${until}`}
                   </div>
-                  <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: -0.5, lineHeight: 1.1 }}>
+                  <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: -0.5, lineHeight: 1.1, color: txt }}>
                     {formatTime12(nextAlarm.time)}
                   </div>
                 </div>
                 <span style={{ fontSize: 40 }}>{nextAlarm.icon}</span>
               </div>
               {/* Behavior list */}
-              {period && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, borderTop: '1px solid rgba(255,255,255,0.25)', paddingTop: 12 }}>
-                  {period.behaviors.map((b, i) => (
-                    <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              {behaviors.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, borderTop: `1px solid ${divider}`, paddingTop: 12 }}>
+                  {behaviors.map((b, i) => (
+                    <div key={b.id || i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <div style={{
                         width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
-                        background: 'rgba(255,255,255,0.25)',
+                        background: numBg,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 11, fontWeight: 700,
+                        fontSize: 11, fontWeight: 700, color: txt,
                       }}>
                         {i + 1}
                       </div>
                       <div style={{ flex: 1 }}>
-                        <span style={{ fontSize: 14, fontWeight: 600 }}>{b.title}</span>
-                        <span style={{ fontSize: 12, opacity: 0.75, marginLeft: 6 }}>{b.tip}</span>
+                        <span style={{ fontSize: 14, fontWeight: 600, color: txt }}>{b.title}</span>
+                        <span style={{ fontSize: 12, color: txtSub, marginLeft: 6 }}>{b.tip}</span>
                       </div>
                     </div>
                   ))}
@@ -277,23 +287,29 @@ export default function Home() {
 
 // ─── Active Routine Card ───────────────────────────────────────────────────────
 
-function ActiveRoutineCard({ alarm, onAction }) {
+function ActiveRoutineCard({ alarm, onAction, behaviors }) {
   const period = ALARM_PERIODS[alarm.type]
   if (!period) return null
+
+  const isDark = period.darkText
+  const headerTxt = isDark ? '#1E1E2E' : 'white'
+  const headerSub = isDark ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.85)'
+  const badgeBg = isDark ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.2)'
+  const effectiveBehaviors = behaviors ?? period.behaviors
 
   return (
     <div className="card" style={{ overflow: 'hidden' }}>
       {/* Gradient header */}
-      <div style={{ background: period.gradient, padding: '16px 20px', color: 'white' }}>
+      <div style={{ background: period.gradient, padding: '16px 20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontSize: 28 }}>{period.icon}</span>
           <div>
-            <div style={{ fontSize: 16, fontWeight: 700 }}>{period.name}</div>
-            <div style={{ fontSize: 12, opacity: 0.85 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: headerTxt }}>{period.name}</div>
+            <div style={{ fontSize: 12, color: headerSub }}>
               {formatTime12(alarm.time)} 알람 · {alarm.diffMins}분 전
             </div>
           </div>
-          <div style={{ marginLeft: 'auto', fontSize: 11, opacity: 0.85, background: 'rgba(255,255,255,0.2)', padding: '4px 10px', borderRadius: 20 }}>
+          <div style={{ marginLeft: 'auto', fontSize: 11, color: headerTxt, background: badgeBg, padding: '4px 10px', borderRadius: 20 }}>
             지금 실천해요!
           </div>
         </div>
@@ -301,7 +317,7 @@ function ActiveRoutineCard({ alarm, onAction }) {
 
       {/* Behavior list */}
       <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {period.behaviors.map((b, i) => (
+        {effectiveBehaviors.map((b, i) => (
           <div key={b.id} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
             <div style={{
               width: 28, height: 28, borderRadius: '50%', flexShrink: 0,

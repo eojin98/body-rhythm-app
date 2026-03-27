@@ -5,6 +5,7 @@ export const ALARM_PERIODS = {
     icon: '🌅',
     gradient: 'linear-gradient(135deg, #F6D365 0%, #FDA085 100%)',
     color: '#E67E22',
+    darkText: true,
     defaultTime: '07:30',
     defaultDays: [0, 1, 2, 3, 4, 5, 6],
     behaviors: [
@@ -34,6 +35,7 @@ export const ALARM_PERIODS = {
     icon: '☀️',
     gradient: 'linear-gradient(135deg, #43E97B 0%, #38F9D7 100%)',
     color: '#00B894',
+    darkText: true,
     defaultTime: '13:30',
     defaultDays: [0, 1, 2, 3, 4, 5, 6],
     behaviors: [
@@ -118,3 +120,8 @@ export const ALARM_PERIODS = {
 }
 
 export const PERIOD_ORDER = ['morning', 'afternoon', 'evening', 'bedtime']
+
+// Returns custom behaviors if set, otherwise falls back to defaults
+export function getEffectiveBehaviors(periodId, customBehaviors) {
+  return customBehaviors?.[periodId] ?? ALARM_PERIODS[periodId]?.behaviors ?? []
+}

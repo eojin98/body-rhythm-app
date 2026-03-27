@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { getRecords, getLastWeekDates, calculatePracticeRate } from '../utils/storage'
-import { ALARM_PERIODS, PERIOD_ORDER } from '../utils/alarmContent'
+import { getRecords, getLastWeekDates, calculatePracticeRate, getSettings } from '../utils/storage'
+import { ALARM_PERIODS, PERIOD_ORDER, getEffectiveBehaviors } from '../utils/alarmContent'
 
 const TABS = PERIOD_ORDER.map(id => ({ id, ...ALARM_PERIODS[id] }))
 
@@ -10,6 +10,8 @@ export default function Dashboard() {
   const records = getRecords()
   const weekDates = getLastWeekDates()
   const period = ALARM_PERIODS[tab]
+  const customBehaviors = getSettings().behaviors
+  const behaviors = getEffectiveBehaviors(tab, customBehaviors)
 
   // Weekly data for the active tab
   const weekData = weekDates.map(({ key, label }) => {
@@ -92,7 +94,7 @@ export default function Dashboard() {
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 17, fontWeight: 700 }}>{period.name}</div>
               <div style={{ fontSize: 13, opacity: 0.85, marginTop: 2 }}>
-                {period.behaviors.map(b => b.title).join(' · ')}
+                {behaviors.map(b => b.title).join(' · ')}
               </div>
             </div>
             <div style={{ textAlign: 'right' }}>
@@ -128,10 +130,10 @@ export default function Dashboard() {
           <div style={{ padding: '14px 20px', borderBottom: '1px solid #F0EFF8' }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: '#6E6E8A' }}>이번 주 루틴 내용</div>
           </div>
-          {period.behaviors.map((b, i) => (
+          {behaviors.map((b, i) => (
             <div key={b.id} style={{
               padding: '14px 20px',
-              borderBottom: i < period.behaviors.length - 1 ? '1px solid #F0EFF8' : 'none',
+              borderBottom: i < behaviors.length - 1 ? '1px solid #F0EFF8' : 'none',
             }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
                 <div style={{
