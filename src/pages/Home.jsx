@@ -12,9 +12,25 @@ import {
   checkPermissionStatusAsync,
   scheduleAlarmNotifications,
   scheduleSnoozeNotification,
+  showNotification,
 } from '../utils/notifications'
-import { ALARM_PERIODS, getEffectiveBehaviors } from '../utils/alarmContent'
+import { ALARM_PERIODS, getEffectiveBehaviors, TEST_HOURLY_BEHAVIORS } from '../utils/alarmContent'
 import ProgressRing from '../components/ProgressRing'
+
+// Find the test mode hourly alarm for the current hour
+function getActiveTestAlarm(testMode, todayRoutines) {
+  if (!testMode) return null
+  const now = new Date()
+  const hourKey = String(now.getHours()).padStart(2, '0')
+  const behavior = TEST_HOURLY_BEHAVIORS[hourKey]
+  if (!behavior) return null
+  const routineKey = `test_${hourKey}`
+  const routine = todayRoutines?.[routineKey]
+  if (routine?.status === 'done' || routine?.status === 'skipped') return null
+  const snoozeUntil = getSnooze(routineKey)
+  if (snoozeUntil && Date.now() < snoozeUntil) return null
+  return { hourKey, behavior }
+}
 
 // Find the most recently triggered alarm that hasn't been acted on
 function getActiveRoutineAlarm(alarms, todayRoutines) {
@@ -46,15 +62,47 @@ export default function Home() {
   const [now, setNow] = useState(new Date())
   const [notifStatus, setNotifStatus] = useState(getPermissionStatus)
   const [activeAlarm, setActiveAlarm] = useState(null)
+  const [testAlarm, setTestAlarm] = useState(null)
+
+  // Auto-navigate to morning checkin on first open of the day (if not done)
+  useEffect(() => {
+    const h = new Date().getHours()
+    if (h >= 5 && h < 11 && !getRecord(getTodayKey())?.completed) {
+      const key = `prompted_${getTodayKey()}`
+      if (!sessionStorage.getItem(key)) {
+        sessionStorage.setItem(key, '1')
+        navigate('/checkin')
+      }
+    }
+  }, [])
 
   useEffect(() => {
     checkPermissionStatusAsync().then(setNotifStatus)
     const tick = () => {
-      setNow(new Date())
+      const nowDate = new Date()
+      setNow(nowDate)
       const rec = getRecord(getTodayKey())
       setTodayRecord(rec)
       const s = getSettings()
+      setSettings(s)
       setActiveAlarm(getActiveRoutineAlarm(s.alarms, rec?.routines))
+      setTestAlarm(getActiveTestAlarm(s.testMode, rec?.routines))
+
+      // Test mode: fire browser notification at the start of each hour
+      if (s.testMode && !Capacitor.isNativePlatform()) {
+        const m = nowDate.getMinutes()
+        if (m < 1) {
+          const h = nowDate.getHours()
+          const hk = String(h).padStart(2, '0')
+          const b = TEST_HOURLY_BEHAVIORS[hk]
+          const nKey = `tnotif_${getTodayKey()}_${hk}`
+          if (b && !sessionStorage.getItem(nKey)) {
+            sessionStorage.setItem(nKey, '1')
+            const dh = h === 0 ? 12 : h > 12 ? h - 12 : h
+            showNotification(`⏰ ${h < 12 ? '오전' : '오후'} ${dh}:00 루틴`, b.title)
+          }
+        }
+      }
     }
     tick()
     const id = setInterval(tick, 30000)
@@ -85,6 +133,7 @@ export default function Home() {
     const rec = getRecord(today)
     setTodayRecord(rec)
     setActiveAlarm(getActiveRoutineAlarm(settings.alarms, rec?.routines))
+    setTestAlarm(getActiveTestAlarm(settings.testMode, rec?.routines))
   }
 
   const practiceRate = calculatePracticeRate(todayRecord)
@@ -140,6 +189,17 @@ export default function Home() {
               ? '알림 권한이 없어 알람이 울리지 않습니다. 설정 탭에서 허용해주세요.'
               : '알림 권한이 없어 알람이 울리지 않을 수 있습니다. 브라우저 설정에서 알림을 허용해주세요.'}
           </span>
+        </div>
+      )}
+
+      {/* Test mode hourly alarm card */}
+      {testAlarm && (
+        <div className="section">
+          <TestAlarmCard
+            hourKey={testAlarm.hourKey}
+            behavior={testAlarm.behavior}
+            onAction={handleRoutineAction}
+          />
         </div>
       )}
 
@@ -360,6 +420,62 @@ function ActiveRoutineCard({ alarm, onAction, behaviors }) {
         >
           완료 ✓
         </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── Test Alarm Card (베타 테스트 전용) ────────────────────────────────────────
+
+function TestAlarmCard({ hourKey, behavior, onAction }) {
+  const h = parseInt(hourKey, 10)
+  const dh = h === 0 ? 12 : h > 12 ? h - 12 : h
+  const period = h < 12 ? '오전' : '오후'
+  const timeStr = `${period} ${dh}:00`
+  const routineKey = `test_${hourKey}`
+
+  const gradient = h >= 22 || h < 6
+    ? 'linear-gradient(135deg, #2C3E50 0%, #4CA1AF 100%)'
+    : h >= 18
+      ? 'linear-gradient(135deg, #6C5CE7 0%, #a29bfe 100%)'
+      : h >= 12
+        ? 'linear-gradient(135deg, #43E97B 0%, #38F9D7 100%)'
+        : 'linear-gradient(135deg, #F6D365 0%, #FDA085 100%)'
+
+  const isDark = h >= 7 && h < 18
+  const txt = isDark ? '#1E1E2E' : 'white'
+  const txtSub = isDark ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.85)'
+  const badgeBg = isDark ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.2)'
+
+  return (
+    <div className="card" style={{ overflow: 'hidden' }}>
+      <div style={{ background: gradient, padding: '14px 20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 26 }}>⏰</span>
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: txt }}>시간별 루틴</div>
+            <div style={{ fontSize: 12, color: txtSub }}>{timeStr} 알람 · 테스트 모드</div>
+          </div>
+          <div style={{ marginLeft: 'auto', fontSize: 11, color: txt, background: badgeBg, padding: '4px 10px', borderRadius: 20 }}>
+            지금 실천해요!
+          </div>
+        </div>
+      </div>
+
+      <div style={{ padding: '16px 20px' }}>
+        <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>{behavior.title}</div>
+        <div style={{ fontSize: 13, color: '#6E6E8A', lineHeight: 1.5 }}>{behavior.desc}</div>
+        {behavior.tip && (
+          <div style={{ fontSize: 11, color: '#A0A0B8', marginTop: 8, padding: '5px 10px', background: '#F5F4FF', borderRadius: 8, display: 'inline-block' }}>
+            💡 {behavior.tip}
+          </div>
+        )}
+      </div>
+
+      <div style={{ padding: '0 20px 16px', display: 'flex', gap: 8 }}>
+        <button className="btn btn-ghost btn-sm" style={{ flex: 1, color: '#A0A0B8', background: '#F5F5F5' }} onClick={() => onAction(routineKey, 'skipped')}>건너뛰기</button>
+        <button className="btn btn-secondary btn-sm" style={{ flex: 1 }} onClick={() => onAction(routineKey, 'snooze')}>나중에 (30분)</button>
+        <button className="btn btn-primary btn-sm" style={{ flex: 2 }} onClick={() => onAction(routineKey, 'done')}>완료 ✓</button>
       </div>
     </div>
   )

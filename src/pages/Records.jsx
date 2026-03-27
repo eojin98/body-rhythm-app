@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { getRecords, calculatePracticeRate, DAY_NAMES, getTodayKey } from '../utils/storage'
+import { getRecords, calculatePracticeRate, DAY_NAMES, getTodayKey, getLastWeekDates } from '../utils/storage'
 import { ALARM_PERIODS, PERIOD_ORDER } from '../utils/alarmContent'
 
 export default function Records() {
@@ -42,12 +42,68 @@ export default function Records() {
     return '#00B894'
   }
 
+  // Weekly summary data
+  const weekDates = getLastWeekDates()
+  const trackedDays = weekDates.filter(d => records[d.key])
+  const weekAvg = trackedDays.length > 0
+    ? Math.round(trackedDays.reduce((s, d) => s + calculatePracticeRate(records[d.key]), 0) / trackedDays.length)
+    : 0
+
   return (
     <div className="page fade-up">
       {/* Header */}
       <div className="page-header">
         <div className="header-title">기록</div>
         <div className="header-sub">날짜별 실천 기록을 확인하세요</div>
+      </div>
+
+      {/* Weekly summary */}
+      <div className="section">
+        <div className="section-title">최근 7일 요약</div>
+        <div className="card card-body">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div>
+              <div style={{ fontSize: 13, color: '#A0A0B8' }}>7일 평균 실천율</div>
+              <div style={{ fontSize: 32, fontWeight: 800, color: '#6C5CE7', lineHeight: 1.1 }}>{weekAvg}%</div>
+            </div>
+            <div style={{ fontSize: 13, color: '#A0A0B8', textAlign: 'right' }}>
+              <div>{trackedDays.length}일 기록</div>
+              <div style={{ fontSize: 11, marginTop: 2 }}>/ 7일</div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            {weekDates.map(({ key, label }) => {
+              const rec = records[key]
+              const rate = rec ? calculatePracticeRate(rec) : null
+              const dotColor = rate !== null ? (rate >= 75 ? '#00B894' : rate >= 50 ? '#FDCB6E' : '#FF7675') : '#EEEEEE'
+              const isToday = key === todayKey
+              const isSelected = key === selectedDate
+              return (
+                <div
+                  key={key}
+                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, cursor: 'pointer' }}
+                  onClick={() => setSelectedDate(key)}
+                >
+                  <div style={{
+                    width: 38, height: 38, borderRadius: '50%',
+                    background: isSelected ? '#6C5CE7' : dotColor,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 11, fontWeight: 700,
+                    color: (isSelected || rate !== null) ? 'white' : '#CCC',
+                    border: isToday && !isSelected ? '2px solid #6C5CE7' : 'none',
+                    boxSizing: 'border-box',
+                  }}>
+                    {rate !== null ? `${rate}%` : '—'}
+                  </div>
+                  <div style={{ fontSize: 11, fontWeight: isToday ? 700 : 400, color: isToday ? '#6C5CE7' : '#A0A0B8' }}>{label}</div>
+                  {rec?.completed && (
+                    <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#6C5CE7' }} />
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
       </div>
 
       {/* Calendar */}

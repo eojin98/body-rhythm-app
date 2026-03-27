@@ -84,6 +84,32 @@ export default function Settings() {
         </div>
       </div>
 
+      {/* Beta test mode */}
+      <div className="section">
+        <div className="section-title">베타 테스트</div>
+        <div className="card card-body">
+          <div className="row-between">
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 600 }}>테스트 모드</div>
+              <div style={{ fontSize: 13, color: '#A0A0B8', marginTop: 2 }}>매 정시마다 시간별 행동양식 알람</div>
+            </div>
+            <label className="toggle-wrap">
+              <input
+                type="checkbox"
+                checked={settings.testMode || false}
+                onChange={() => persistSettings({ ...settings, testMode: !settings.testMode })}
+              />
+              <div className="toggle-track" />
+            </label>
+          </div>
+          {settings.testMode && (
+            <div style={{ marginTop: 10, padding: '8px 12px', background: '#FFF8E6', borderRadius: 8, fontSize: 12, color: '#7A5800', lineHeight: 1.5 }}>
+              ⚠️ 앱이 열려 있을 때 매 정시마다 팝업과 알림이 표시됩니다. 베타 테스트 전용입니다.
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Behavior alarms */}
       <div className="section">
         <div className="section-title">시간대별 알람</div>

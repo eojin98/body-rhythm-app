@@ -38,6 +38,7 @@ const DEFAULT_SETTINGS = {
   sleepTime: '23:00',
   alarms: DEFAULT_ALARMS,
   behaviors: {},
+  testMode: false,
   appVersion: APP_VERSION,
 }
 
