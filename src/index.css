@@ -61,6 +61,7 @@ body {
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   scroll-behavior: smooth;
+  padding-bottom: calc(var(--nav-h) + var(--safe-bottom));
 }
 
 .page-content-full {

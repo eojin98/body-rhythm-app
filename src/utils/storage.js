@@ -96,15 +96,12 @@ function isMealEaten(meal) {
   return !meal.skipped
 }
 
+const ROUTINE_PERIOD_IDS = ['morning', 'afternoon', 'evening', 'bedtime']
+
 export function calculatePracticeRate(record) {
-  if (!record || !record.completed) return 0
-  let score = 0
-  if (record.wakeOnTime) score += 25
-  const mealCount = ['breakfast', 'lunch', 'dinner'].filter(k => isMealEaten(record.meals?.[k])).length
-  if (mealCount >= 2) score += 25
-  if (record.exercise) score += 25
-  if (record.completed) score += 25
-  return score
+  if (!record) return 0
+  const doneCount = ROUTINE_PERIOD_IDS.filter(pid => record.routines?.[pid]?.status === 'done').length
+  return Math.round((doneCount / ROUTINE_PERIOD_IDS.length) * 100)
 }
 
 export function getLastWeekDates() {

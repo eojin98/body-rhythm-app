@@ -74,7 +74,7 @@ export default function Records() {
               const rate = rec ? calculatePracticeRate(rec) : 0
               const isToday = key === todayKey
               const isSelected = key === selectedDate
-              const dotColor = rec?.completed ? getRateColor(rate) : null
+              const dotColor = rate > 0 ? getRateColor(rate) : null
               const dow = new Date(viewYear, viewMonth, d).getDay()
 
               return (

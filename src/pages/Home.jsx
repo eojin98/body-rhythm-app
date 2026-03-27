@@ -163,17 +163,12 @@ export default function Home() {
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>오늘의 실천율</div>
-              {todayRecord?.completed ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <ScoreBadge label="기상" done={todayRecord.wakeOnTime} />
-                  <ScoreBadge label="식사" done={['breakfast', 'lunch', 'dinner'].filter(k => { const m = todayRecord.meals?.[k]; return m != null && (typeof m === 'boolean' ? m : !m.skipped) }).length >= 2} />
-                  <ScoreBadge label="운동" done={todayRecord.exercise} />
-                </div>
-              ) : (
-                <div style={{ color: '#A0A0B8', fontSize: 13, lineHeight: 1.6 }}>
-                  아침 체크인을 완료하면<br />실천율이 계산됩니다
-                </div>
-              )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <RoutineBadge label="아침" icon="🌅" status={todayRecord?.routines?.morning?.status} />
+                <RoutineBadge label="오후" icon="☀️" status={todayRecord?.routines?.afternoon?.status} />
+                <RoutineBadge label="저녁" icon="🌆" status={todayRecord?.routines?.evening?.status} />
+                <RoutineBadge label="취침" icon="🌙" status={todayRecord?.routines?.bedtime?.status} />
+              </div>
             </div>
           </div>
           {showCheckinBtn && (
@@ -336,11 +331,16 @@ function ActiveRoutineCard({ alarm, onAction }) {
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
-function ScoreBadge({ label, done }) {
+function RoutineBadge({ label, icon, status }) {
+  const done = status === 'done'
+  const skipped = status === 'skipped'
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-      <span style={{ fontSize: 14 }}>{done ? '✅' : '⬜'}</span>
-      <span style={{ fontSize: 13, color: done ? '#00B894' : '#A0A0B8', fontWeight: 500 }}>{label}</span>
+      <span style={{ fontSize: 12 }}>{icon}</span>
+      <span style={{ fontSize: 12, fontWeight: 500, color: done ? '#00B894' : skipped ? '#FDCB6E' : '#A0A0B8' }}>
+        {label}
+      </span>
+      <span style={{ fontSize: 11 }}>{done ? '✅' : skipped ? '⏭' : '⬜'}</span>
     </div>
   )
 }
