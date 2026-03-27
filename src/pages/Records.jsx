@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { getRecords, calculatePracticeRate, DAY_NAMES, getTodayKey } from '../utils/storage'
 import { ALARM_PERIODS, PERIOD_ORDER } from '../utils/alarmContent'
 
@@ -7,8 +7,15 @@ export default function Records() {
   const [viewYear, setViewYear] = useState(today.getFullYear())
   const [viewMonth, setViewMonth] = useState(today.getMonth())
   const [selectedDate, setSelectedDate] = useState(getTodayKey())
+  const [records, setRecords] = useState(getRecords)
 
-  const records = getRecords()
+  const refresh = useCallback(() => setRecords(getRecords()), [])
+
+  useEffect(() => {
+    refresh()
+    window.addEventListener('focus', refresh)
+    return () => window.removeEventListener('focus', refresh)
+  }, [])
 
   const prevMonth = () => {
     if (viewMonth === 0) { setViewYear(y => y - 1); setViewMonth(11) }
@@ -118,7 +125,11 @@ export default function Records() {
         ) : (
           <div className="empty-state" style={{ padding: '32px 20px' }}>
             <div className="empty-state-icon">📭</div>
-            <div className="empty-state-text">이 날의 체크인 기록이 없습니다</div>
+            <div className="empty-state-text">
+              {selectedDate === getTodayKey()
+                ? '오늘 아직 루틴 기록이 없습니다'
+                : '이 날의 기록이 없습니다'}
+            </div>
           </div>
         )}
       </div>
@@ -191,7 +202,7 @@ function RecordDetail({ record }) {
       {/* Sleep (only if checkin completed) */}
       {record.completed && (
         <div className="card card-body">
-          <div style={{ fontSize: 13, fontWeight: 600, color: '#6E6E8A', marginBottom: 12 }}>수면 (모닝 체크인)</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#6E6E8A', marginBottom: 12 }}>💤 모닝 체크인</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
             <Stat label="취침" value={fmt(record.sleepTime)} />
             <Stat label="기상" value={fmt(record.wakeTime)} color={record.wakeOnTime ? '#00B894' : '#FF7675'} />

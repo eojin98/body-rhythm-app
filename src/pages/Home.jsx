@@ -184,32 +184,52 @@ export default function Home() {
       </div>
 
       {/* Next Alarm */}
-      {nextAlarm && (
-        <div className="section">
-          <div className="section-title">다음 알람</div>
-          <div className="card card-body" style={{ background: 'linear-gradient(135deg, #6C5CE7 0%, #a29bfe 100%)', color: 'white' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div>
-                <div style={{ fontSize: 13, opacity: 0.8, marginBottom: 4 }}>
-                  {nextAlarm.daysFromNow === 0 ? '오늘' : nextAlarm.daysFromNow === 1 ? '내일' : `${nextAlarm.daysFromNow}일 후`}
+      {nextAlarm && (() => {
+        const period = ALARM_PERIODS[nextAlarm.type]
+        const gradient = period?.gradient || 'linear-gradient(135deg, #6C5CE7 0%, #a29bfe 100%)'
+        const until = timeUntil(nextAlarm.time, nextAlarm.daysFromNow)
+        return (
+          <div className="section">
+            <div className="section-title">다음 루틴</div>
+            <div className="card card-body" style={{ background: gradient, color: 'white', gap: 0 }}>
+              {/* Time row */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                <div>
+                  <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 3 }}>
+                    {nextAlarm.daysFromNow === 0 ? '오늘' : nextAlarm.daysFromNow === 1 ? '내일' : `${nextAlarm.daysFromNow}일 후`}
+                    {until && ` · ${until}`}
+                  </div>
+                  <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: -0.5, lineHeight: 1.1 }}>
+                    {formatTime12(nextAlarm.time)}
+                  </div>
                 </div>
-                <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: -0.5 }}>
-                  {formatTime12(nextAlarm.time)}
-                </div>
-                <div style={{ fontSize: 14, opacity: 0.85, marginTop: 2 }}>
-                  {nextAlarm.icon} {nextAlarm.name}
-                </div>
+                <span style={{ fontSize: 40 }}>{nextAlarm.icon}</span>
               </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: 13, opacity: 0.8 }}>
-                  {timeUntil(nextAlarm.time, nextAlarm.daysFromNow)}
+              {/* Behavior list */}
+              {period && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, borderTop: '1px solid rgba(255,255,255,0.25)', paddingTop: 12 }}>
+                  {period.behaviors.map((b, i) => (
+                    <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{
+                        width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+                        background: 'rgba(255,255,255,0.25)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 11, fontWeight: 700,
+                      }}>
+                        {i + 1}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <span style={{ fontSize: 14, fontWeight: 600 }}>{b.title}</span>
+                        <span style={{ fontSize: 12, opacity: 0.75, marginLeft: 6 }}>{b.tip}</span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <div style={{ fontSize: 32, marginTop: 4 }}>🔔</div>
-              </div>
+              )}
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* Today's Alarms */}
       <div className="section">

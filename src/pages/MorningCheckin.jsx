@@ -64,7 +64,7 @@ export default function MorningCheckin() {
       completed: true,
       completedAt: new Date().toISOString(),
     })
-    navigate('/')
+    navigate('/records')
   }
 
   const updateMeal = (key, patch) =>
