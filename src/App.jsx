@@ -1,4 +1,4 @@
-import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { Capacitor } from '@capacitor/core'
 import { getSettings } from './utils/storage'
@@ -12,6 +12,7 @@ import Settings from './pages/Settings'
 import BottomNav from './components/BottomNav'
 
 function AppContent() {
+  const location = useLocation()
   const [onboardingDone, setOnboardingDone] = useState(() => {
     return getSettings().onboardingComplete || false
   })
@@ -45,7 +46,7 @@ function AppContent() {
 
   return (
     <>
-      <div className="page-content">
+      <div className={`page-content${location.pathname === '/checkin' ? ' page-content-full' : ''}`}>
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/checkin" element={<MorningCheckin />} />
@@ -55,7 +56,7 @@ function AppContent() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
-      <BottomNav />
+      {location.pathname !== '/checkin' && <BottomNav />}
     </>
   )
 }

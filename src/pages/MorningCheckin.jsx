@@ -75,7 +75,7 @@ export default function MorningCheckin() {
   return (
     <div
       className="page-no-nav fade-up"
-      style={{ background: 'white', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+      style={{ background: 'white', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
     >
       {/* Header */}
       <div style={{

@@ -63,6 +63,12 @@ body {
   scroll-behavior: smooth;
 }
 
+.page-content-full {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
 .page {
   min-height: calc(100% - var(--nav-h) - var(--safe-bottom));
   padding-bottom: 24px;

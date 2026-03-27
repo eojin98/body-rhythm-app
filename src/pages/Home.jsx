@@ -103,10 +103,7 @@ export default function Home() {
     return `${d.getMonth() + 1}월 ${d.getDate()}일 ${DAY_NAMES[d.getDay()]}요일`
   })()
 
-  const showCheckinBtn = (() => {
-    const h = now.getHours()
-    return h >= 5 && h < 14 && !todayRecord?.completed
-  })()
+  const showCheckinBtn = !todayRecord?.completed
 
   const todayAlarms = settings.alarms
     .filter(a => a.days.includes(now.getDay()))
