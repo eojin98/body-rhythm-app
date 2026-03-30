@@ -153,7 +153,7 @@ export default function Home() {
           behavior,
           status: todayRecord?.routines?.[`test_${hk}`]?.status || null,
         }))
-        .sort(([a], [b]) => a.localeCompare(b))
+        .sort((a, b) => a.hk.localeCompare(b.hk))
     : []
 
   // Fired regular alarms for today (regular mode)
