@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { getRecords, calculatePracticeRate, DAY_NAMES, getTodayKey, getLastWeekDates } from '../utils/storage'
-import { ALARM_PERIODS, PERIOD_ORDER } from '../utils/alarmContent'
+import { getRecords, calculatePracticeRate, saveRoutineAction, clearRoutineAction, DAY_NAMES, getTodayKey, getLastWeekDates } from '../utils/storage'
+import { ALARM_PERIODS, PERIOD_ORDER, TEST_HOURLY_BEHAVIORS } from '../utils/alarmContent'
 
 export default function Records() {
   const today = new Date()
@@ -177,7 +177,7 @@ export default function Records() {
           {selectedDate.replace(/(\d{4})-(\d{2})-(\d{2})/, '$1년 $2월 $3일')} 기록
         </div>
         {selectedRecord ? (
-          <RecordDetail record={selectedRecord} />
+          <RecordDetail record={selectedRecord} dateKey={selectedDate} onUpdate={refresh} />
         ) : (
           <div className="empty-state" style={{ padding: '32px 20px' }}>
             <div className="empty-state-icon">📭</div>
@@ -193,7 +193,9 @@ export default function Records() {
   )
 }
 
-function RecordDetail({ record }) {
+function RecordDetail({ record, dateKey, onUpdate }) {
+  const [editingKey, setEditingKey] = useState(null)
+
   const rate = calculatePracticeRate(record)
   const rateColor = rate >= 75 ? '#00B894' : rate >= 50 ? '#FDCB6E' : '#FF7675'
 
@@ -204,6 +206,22 @@ function RecordDetail({ record }) {
     const hh = h === 0 ? 12 : h > 12 ? h - 12 : h
     return `${p} ${hh}:${String(m).padStart(2, '0')}`
   }
+
+  const handleEdit = (periodId, newStatus) => {
+    if (newStatus === null) {
+      clearRoutineAction(dateKey, periodId)
+    } else {
+      saveRoutineAction(dateKey, periodId, newStatus)
+    }
+    setEditingKey(null)
+    onUpdate()
+  }
+
+  // Detect test mode by checking for test_ routines
+  const testRoutineEntries = Object.entries(record.routines || {})
+    .filter(([k]) => k.startsWith('test_'))
+    .sort(([a], [b]) => a.localeCompare(b))
+  const hasTestRoutines = testRoutineEntries.length > 0
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -225,40 +243,100 @@ function RecordDetail({ record }) {
         </div>
       </div>
 
-      {/* Routine completions */}
-      <div className="card card-body">
-        <div style={{ fontSize: 13, fontWeight: 600, color: '#6E6E8A', marginBottom: 12 }}>루틴 실천</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {PERIOD_ORDER.map(pid => {
-            const p = ALARM_PERIODS[pid]
-            const status = record.routines?.[pid]?.status || null
-            return (
-              <div key={pid} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{
-                  width: 32, height: 32, borderRadius: 10, flexShrink: 0,
-                  background: p.gradient,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16,
-                }}>
-                  {p.icon}
+      {/* Hourly test alarms (if any) */}
+      {hasTestRoutines && (
+        <div className="card card-body">
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#6E6E8A', marginBottom: 12 }}>⏰ 시간별 알람 실천</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {testRoutineEntries.map(([k, v]) => {
+              const hk = k.replace('test_', '')
+              const h = parseInt(hk, 10)
+              const dh = h === 0 ? 12 : h > 12 ? h - 12 : h
+              const timeLabel = `${h < 12 ? '오전' : '오후'} ${dh}:00`
+              const behavior = TEST_HOURLY_BEHAVIORS[hk]
+              const status = v?.status || null
+              const isEditing = editingKey === k
+              return (
+                <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>{timeLabel}</div>
+                    {behavior && <div style={{ fontSize: 11, color: '#A0A0B8' }}>{behavior.title}</div>}
+                  </div>
+                  {!isEditing ? (
+                    <button
+                      onClick={() => setEditingKey(k)}
+                      style={{
+                        fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 20, border: 'none', cursor: 'pointer',
+                        background: status === 'done' ? '#E6FBF5' : status === 'skipped' ? '#FFF8E6' : '#F5F5F5',
+                        color: status === 'done' ? '#00B894' : status === 'skipped' ? '#E67E22' : '#CCC',
+                      }}
+                    >
+                      {status === 'done' ? '✅ 완료' : status === 'skipped' ? '⏭ 건너뜀' : '— 기록 없음'} ✏️
+                    </button>
+                  ) : (
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                      <button className="btn btn-primary btn-sm" style={{ padding: '4px 8px', fontSize: 11 }} onClick={() => handleEdit(k, 'done')}>완료 ✓</button>
+                      <button className="btn btn-ghost btn-sm" style={{ padding: '4px 8px', fontSize: 11, background: '#FFF8E6', color: '#E67E22' }} onClick={() => handleEdit(k, 'skipped')}>건너뜀</button>
+                      {status && <button className="btn btn-ghost btn-sm" style={{ padding: '4px 8px', fontSize: 11 }} onClick={() => handleEdit(k, null)}>삭제</button>}
+                      <button className="btn btn-ghost btn-sm" style={{ padding: '4px 8px', fontSize: 11 }} onClick={() => setEditingKey(null)}>취소</button>
+                    </div>
+                  )}
                 </div>
-                <div style={{ flex: 1, fontSize: 14, fontWeight: 500 }}>{p.name}</div>
-                <div style={{
-                  fontSize: 12, fontWeight: 600, padding: '3px 10px', borderRadius: 20,
-                  background: status === 'done' ? '#E6FBF5' : status === 'skipped' ? '#FFF8E6' : '#F5F5F5',
-                  color: status === 'done' ? '#00B894' : status === 'skipped' ? '#E67E22' : '#CCC',
-                }}>
-                  {status === 'done' ? '✅ 완료' : status === 'skipped' ? '⏭ 건너뜀' : '— 기록 없음'}
-                </div>
-              </div>
-            )
-          })}
+              )
+            })}
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Regular routine completions (if no test routines) */}
+      {!hasTestRoutines && (
+        <div className="card card-body">
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#6E6E8A', marginBottom: 12 }}>루틴 실천</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {PERIOD_ORDER.map(pid => {
+              const p = ALARM_PERIODS[pid]
+              const status = record.routines?.[pid]?.status || null
+              const isEditing = editingKey === pid
+              return (
+                <div key={pid} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <div style={{
+                    width: 32, height: 32, borderRadius: 10, flexShrink: 0,
+                    background: p.gradient,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16,
+                  }}>
+                    {p.icon}
+                  </div>
+                  <div style={{ flex: 1, fontSize: 14, fontWeight: 500 }}>{p.name}</div>
+                  {!isEditing ? (
+                    <button
+                      onClick={() => setEditingKey(pid)}
+                      style={{
+                        fontSize: 12, fontWeight: 600, padding: '3px 10px', borderRadius: 20, border: 'none', cursor: 'pointer',
+                        background: status === 'done' ? '#E6FBF5' : status === 'skipped' ? '#FFF8E6' : '#F5F5F5',
+                        color: status === 'done' ? '#00B894' : status === 'skipped' ? '#E67E22' : '#CCC',
+                      }}
+                    >
+                      {status === 'done' ? '✅ 완료' : status === 'skipped' ? '⏭ 건너뜀' : '— 기록 없음'} ✏️
+                    </button>
+                  ) : (
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                      <button className="btn btn-primary btn-sm" style={{ padding: '4px 8px', fontSize: 11 }} onClick={() => handleEdit(pid, 'done')}>완료 ✓</button>
+                      <button className="btn btn-ghost btn-sm" style={{ padding: '4px 8px', fontSize: 11, background: '#FFF8E6', color: '#E67E22' }} onClick={() => handleEdit(pid, 'skipped')}>건너뜀</button>
+                      {status && <button className="btn btn-ghost btn-sm" style={{ padding: '4px 8px', fontSize: 11 }} onClick={() => handleEdit(pid, null)}>삭제</button>}
+                      <button className="btn btn-ghost btn-sm" style={{ padding: '4px 8px', fontSize: 11 }} onClick={() => setEditingKey(null)}>취소</button>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Sleep (only if checkin completed) */}
       {record.completed && (
         <div className="card card-body">
-          <div style={{ fontSize: 13, fontWeight: 600, color: '#6E6E8A', marginBottom: 12 }}>💤 모닝 체크인</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#6E6E8A', marginBottom: 12 }}>💤 모닝 체크인 (참고 정보)</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
             <Stat label="취침" value={fmt(record.sleepTime)} />
             <Stat label="기상" value={fmt(record.wakeTime)} color={record.wakeOnTime ? '#00B894' : '#FF7675'} />

@@ -3,9 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
 import {
   getSettings, saveSettings, getRecord, getTodayKey,
-  calculatePracticeRate, getNextAlarm, timeUntil,
+  calculateTodayPracticeRate, getNextAlarm, timeUntil,
   formatTime12, DAY_NAMES,
-  saveRoutineAction, getSnooze, setSnooze,
+  saveRoutineAction, clearRoutineAction, getSnooze, setSnooze,
 } from '../utils/storage'
 import {
   getPermissionStatus,
@@ -124,6 +124,8 @@ export default function Home() {
     const today = getTodayKey()
     if (action === 'done' || action === 'skipped') {
       saveRoutineAction(today, periodId, action)
+    } else if (action === 'clear') {
+      clearRoutineAction(today, periodId)
     } else if (action === 'snooze') {
       const snoozeMs = Date.now() + 30 * 60 * 1000
       setSnooze(periodId, snoozeMs)
@@ -136,8 +138,41 @@ export default function Home() {
     setTestAlarm(getActiveTestAlarm(settings.testMode, rec?.routines))
   }
 
-  const practiceRate = calculatePracticeRate(todayRecord)
+  const testBehaviorKeys = Object.keys(TEST_HOURLY_BEHAVIORS)
+  const practiceRate = calculateTodayPracticeRate(todayRecord, settings, testBehaviorKeys)
   const nextAlarm = getNextAlarm(settings.alarms)
+
+  // Fired test alarms for today (test mode)
+  const now2 = new Date()
+  const nowMins2 = now2.getHours() * 60 + now2.getMinutes()
+  const firedTestAlarms = settings.testMode
+    ? Object.entries(TEST_HOURLY_BEHAVIORS)
+        .filter(([hk]) => parseInt(hk, 10) * 60 <= nowMins2)
+        .map(([hk, behavior]) => ({
+          hk,
+          behavior,
+          status: todayRecord?.routines?.[`test_${hk}`]?.status || null,
+        }))
+        .sort(([a], [b]) => a.localeCompare(b))
+    : []
+
+  // Fired regular alarms for today (regular mode)
+  const firedRegularAlarms = !settings.testMode
+    ? settings.alarms
+        .filter(a => {
+          if (!a.enabled || !a.type || !a.days.includes(now2.getDay())) return false
+          const [h, m] = a.time.split(':').map(Number)
+          return h * 60 + m <= nowMins2
+        })
+        .sort((a, b) => a.time.localeCompare(b.time))
+    : []
+
+  const firedCount = settings.testMode ? firedTestAlarms.length : firedRegularAlarms.length
+  const doneCount = settings.testMode
+    ? firedTestAlarms.filter(t => t.status === 'done').length
+    : firedRegularAlarms.filter(a => todayRecord?.routines?.[a.type]?.status === 'done').length
+
+  const [editingKey, setEditingKey] = useState(null)
 
   const greetings = () => {
     const h = now.getHours()
@@ -151,8 +186,6 @@ export default function Home() {
     const d = now
     return `${d.getMonth() + 1}월 ${d.getDate()}일 ${DAY_NAMES[d.getDay()]}요일`
   })()
-
-  const showCheckinBtn = !todayRecord?.completed
 
   const todayAlarms = settings.alarms
     .filter(a => a.days.includes(now.getDay()))
@@ -226,24 +259,19 @@ export default function Home() {
               </div>
             </div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>오늘의 실천율</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <RoutineBadge label="아침" icon="🌅" status={todayRecord?.routines?.morning?.status} />
-                <RoutineBadge label="오후" icon="☀️" status={todayRecord?.routines?.afternoon?.status} />
-                <RoutineBadge label="저녁" icon="🌆" status={todayRecord?.routines?.evening?.status} />
-                <RoutineBadge label="취침" icon="🌙" status={todayRecord?.routines?.bedtime?.status} />
-              </div>
+              <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>오늘의 실천율</div>
+              {firedCount > 0 ? (
+                <div style={{ fontSize: 13, color: '#6E6E8A', marginBottom: 6 }}>
+                  {doneCount}개 완료 / {firedCount}개 알람
+                </div>
+              ) : (
+                <div style={{ fontSize: 13, color: '#A0A0B8', marginBottom: 6 }}>아직 울린 알람이 없어요</div>
+              )}
+              {practiceRate === 100 && firedCount > 0 && (
+                <div style={{ fontSize: 12, color: '#00B894', fontWeight: 600 }}>완벽한 실천! 🎉</div>
+              )}
             </div>
           </div>
-          {showCheckinBtn && (
-            <button
-              className="btn btn-primary btn-full"
-              style={{ marginTop: 16 }}
-              onClick={() => navigate('/checkin')}
-            >
-              아침 체크인 시작 →
-            </button>
-          )}
         </div>
       </div>
 
@@ -301,6 +329,55 @@ export default function Home() {
         )
       })()}
 
+      {/* Test mode: today's fired hourly alarms */}
+      {settings.testMode && firedTestAlarms.length > 0 && (
+        <div className="section">
+          <div className="section-title">오늘의 시간별 알람 기록</div>
+          <div className="card">
+            {firedTestAlarms.map(({ hk, behavior, status }) => {
+              const h = parseInt(hk, 10)
+              const dh = h === 0 ? 12 : h > 12 ? h - 12 : h
+              const timeLabel = `${h < 12 ? '오전' : '오후'} ${dh}:00`
+              const routineKey = `test_${hk}`
+              const isEditing = editingKey === routineKey
+              return (
+                <div key={hk} style={{ padding: '12px 16px', borderBottom: '1px solid #F0EFF8' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+                      background: 'linear-gradient(135deg, #6C5CE7 0%, #a29bfe 100%)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16,
+                    }}>⏰</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600 }}>{timeLabel} — {behavior.title}</div>
+                    </div>
+                    {!isEditing ? (
+                      <button
+                        onClick={() => setEditingKey(routineKey)}
+                        style={{
+                          fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 20, border: 'none', cursor: 'pointer',
+                          background: status === 'done' ? '#E6FBF5' : status === 'skipped' ? '#FFF8E6' : '#F0F0F8',
+                          color: status === 'done' ? '#00B894' : status === 'skipped' ? '#E67E22' : '#A0A0B8',
+                        }}
+                      >
+                        {status === 'done' ? '✅ 완료' : status === 'skipped' ? '⏭ 건너뜀' : '— 기록없음'} ✏️
+                      </button>
+                    ) : (
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <button className="btn btn-primary btn-sm" style={{ padding: '4px 8px', fontSize: 11 }} onClick={() => { handleRoutineAction(routineKey, 'done'); setEditingKey(null) }}>완료 ✓</button>
+                        <button className="btn btn-ghost btn-sm" style={{ padding: '4px 8px', fontSize: 11, background: '#FFF8E6', color: '#E67E22' }} onClick={() => { handleRoutineAction(routineKey, 'skipped'); setEditingKey(null) }}>건너뜀</button>
+                        {status && <button className="btn btn-ghost btn-sm" style={{ padding: '4px 8px', fontSize: 11 }} onClick={() => { handleRoutineAction(routineKey, 'clear'); setEditingKey(null) }}>삭제</button>}
+                        <button className="btn btn-ghost btn-sm" style={{ padding: '4px 8px', fontSize: 11 }} onClick={() => setEditingKey(null)}>취소</button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Today's Alarms */}
       <div className="section">
         <div className="section-title">오늘의 알람</div>
@@ -313,17 +390,37 @@ export default function Home() {
           <div className="card">
             {todayAlarms.map(alarm => {
               const routineStatus = todayRecord?.routines?.[alarm.type]?.status
+              const isEditing = editingKey === alarm.type
               return (
-                <div key={alarm.id} className={`alarm-item${alarm.past ? ' past' : ''}`}>
+                <div key={alarm.id} className={`alarm-item${alarm.past ? ' past' : ''}`} style={{ flexWrap: 'wrap', gap: 8 }}>
                   <div className="alarm-icon-wrap" style={{ background: alarm.past ? '#F0F0F8' : '#EDE9FE' }}>
                     {alarm.icon}
                   </div>
-                  <div className="alarm-info">
+                  <div className="alarm-info" style={{ flex: 1 }}>
                     <div className="alarm-name">{alarm.name}</div>
                     <div className="alarm-time">{formatTime12(alarm.time)}</div>
-                    {routineStatus && (
-                      <div className="alarm-days" style={{ color: routineStatus === 'done' ? '#00B894' : '#A0A0B8' }}>
-                        {routineStatus === 'done' ? '✅ 완료' : '⏭ 건너뜀'}
+                    {routineStatus && !isEditing && (
+                      <button
+                        onClick={() => setEditingKey(alarm.type)}
+                        style={{ marginTop: 2, fontSize: 11, color: routineStatus === 'done' ? '#00B894' : '#E67E22', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                      >
+                        {routineStatus === 'done' ? '✅ 완료' : '⏭ 건너뜀'} (수정)
+                      </button>
+                    )}
+                    {alarm.past && !routineStatus && !isEditing && (
+                      <button
+                        onClick={() => setEditingKey(alarm.type)}
+                        style={{ marginTop: 2, fontSize: 11, color: '#A0A0B8', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                      >
+                        — 기록 입력
+                      </button>
+                    )}
+                    {isEditing && (
+                      <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
+                        <button className="btn btn-primary btn-sm" style={{ padding: '4px 8px', fontSize: 11 }} onClick={() => { handleRoutineAction(alarm.type, 'done'); setEditingKey(null) }}>완료 ✓</button>
+                        <button className="btn btn-ghost btn-sm" style={{ padding: '4px 8px', fontSize: 11, background: '#FFF8E6', color: '#E67E22' }} onClick={() => { handleRoutineAction(alarm.type, 'skipped'); setEditingKey(null) }}>건너뜀</button>
+                        {routineStatus && <button className="btn btn-ghost btn-sm" style={{ padding: '4px 8px', fontSize: 11 }} onClick={() => { handleRoutineAction(alarm.type, 'clear'); setEditingKey(null) }}>삭제</button>}
+                        <button className="btn btn-ghost btn-sm" style={{ padding: '4px 8px', fontSize: 11 }} onClick={() => setEditingKey(null)}>취소</button>
                       </div>
                     )}
                   </div>
@@ -481,18 +578,3 @@ function TestAlarmCard({ hourKey, behavior, onAction }) {
   )
 }
 
-// ─── helpers ──────────────────────────────────────────────────────────────────
-
-function RoutineBadge({ label, icon, status }) {
-  const done = status === 'done'
-  const skipped = status === 'skipped'
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-      <span style={{ fontSize: 12 }}>{icon}</span>
-      <span style={{ fontSize: 12, fontWeight: 500, color: done ? '#00B894' : skipped ? '#FDCB6E' : '#A0A0B8' }}>
-        {label}
-      </span>
-      <span style={{ fontSize: 11 }}>{done ? '✅' : skipped ? '⏭' : '⬜'}</span>
-    </div>
-  )
-}

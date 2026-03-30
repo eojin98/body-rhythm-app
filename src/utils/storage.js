@@ -118,8 +118,39 @@ const ROUTINE_PERIOD_IDS = ['morning', 'afternoon', 'evening', 'bedtime']
 
 export function calculatePracticeRate(record) {
   if (!record) return 0
+  // Test mode: use hourly test_ routines if present
+  const testEntries = Object.entries(record.routines || {}).filter(([k]) => k.startsWith('test_'))
+  if (testEntries.length > 0) {
+    const done = testEntries.filter(([, v]) => v?.status === 'done').length
+    return Math.round((done / testEntries.length) * 100)
+  }
   const doneCount = ROUTINE_PERIOD_IDS.filter(pid => record.routines?.[pid]?.status === 'done').length
   return Math.round((doneCount / ROUTINE_PERIOD_IDS.length) * 100)
+}
+
+// Time-aware practice rate for home screen (only counts alarms that have already fired today)
+export function calculateTodayPracticeRate(record, settings, testBehaviorKeys) {
+  if (!record) return 0
+  const now = new Date()
+  const nowMins = now.getHours() * 60 + now.getMinutes()
+
+  if (settings?.testMode && testBehaviorKeys) {
+    const fired = testBehaviorKeys.filter(hk => parseInt(hk, 10) * 60 <= nowMins)
+    if (!fired.length) return 0
+    const done = fired.filter(hk => record.routines?.[`test_${hk}`]?.status === 'done').length
+    return Math.round((done / fired.length) * 100)
+  }
+
+  const todayDay = now.getDay()
+  const alarms = settings?.alarms || []
+  const fired = alarms.filter(a => {
+    if (!a.enabled || !a.type || !a.days.includes(todayDay)) return false
+    const [h, m] = a.time.split(':').map(Number)
+    return h * 60 + m <= nowMins
+  })
+  if (!fired.length) return 0
+  const done = fired.filter(a => record.routines?.[a.type]?.status === 'done').length
+  return Math.round((done / fired.length) * 100)
 }
 
 export function getLastWeekDates() {
@@ -221,6 +252,15 @@ export function saveRoutineAction(dateKey, periodId, status) {
       [periodId]: { status, updatedAt: new Date().toISOString() },
     },
   }
+  localStorage.setItem(keys().records, JSON.stringify(records))
+}
+
+export function clearRoutineAction(dateKey, periodId) {
+  const records = getRecords()
+  const record = records[dateKey]
+  if (!record?.routines?.[periodId]) return
+  const { [periodId]: _removed, ...rest } = record.routines
+  records[dateKey] = { ...record, routines: rest }
   localStorage.setItem(keys().records, JSON.stringify(records))
 }
 
