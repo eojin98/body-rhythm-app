@@ -7,6 +7,7 @@ import {
   checkPermissionStatusAsync,
   scheduleAlarmNotifications,
   syncAllAlarmNotifications,
+  initNotificationChannels,
 } from '../utils/notifications'
 import { ALARM_PERIODS, PERIOD_ORDER, getEffectiveBehaviors } from '../utils/alarmContent'
 
@@ -80,6 +81,49 @@ export default function Settings() {
               {Capacitor.isNativePlatform()
                 ? '⚠️ 기기 설정 > 앱 > Body Rhythm 알람 > 알림에서 허용해주세요.'
                 : '⚠️ 알림을 허용해야 알람이 울립니다. 앱이 열려 있을 때만 동작합니다.'}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Alarm sound mode */}
+      <div className="section">
+        <div className="section-title">알람 소리</div>
+        <div className="card card-body">
+          {[
+            { value: 'sound',   label: '소리 + 진동', icon: '🔔' },
+            { value: 'vibrate', label: '진동만',       icon: '📳' },
+            { value: 'silent',  label: '무음',         icon: '🔕' },
+          ].map(opt => {
+            const active = (settings.alarmSoundMode ?? 'sound') === opt.value
+            return (
+              <button
+                key={opt.value}
+                onClick={async () => {
+                  const updated = { ...settings, alarmSoundMode: opt.value }
+                  persistSettings(updated)
+                  await initNotificationChannels()
+                  await syncAllAlarmNotifications(updated.alarms, updated.testMode)
+                }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  width: '100%', background: active ? '#F5F4FF' : 'transparent',
+                  border: active ? '1.5px solid #6C5CE7' : '1.5px solid transparent',
+                  borderRadius: 12, padding: '12px 14px', cursor: 'pointer',
+                  marginBottom: 8, textAlign: 'left',
+                }}
+              >
+                <span style={{ fontSize: 22 }}>{opt.icon}</span>
+                <span style={{ fontSize: 15, fontWeight: active ? 700 : 500, color: active ? '#6C5CE7' : '#1E1E2E' }}>
+                  {opt.label}
+                </span>
+                {active && <span style={{ marginLeft: 'auto', color: '#6C5CE7', fontSize: 18 }}>✓</span>}
+              </button>
+            )
+          })}
+          {Capacitor.isNativePlatform() && (
+            <div style={{ fontSize: 12, color: '#A0A0B8', marginTop: 4, lineHeight: 1.5 }}>
+              * 채널별 소리/진동은 기기 설정 &gt; 앱 &gt; 알림에서도 조정할 수 있습니다.
             </div>
           )}
         </div>

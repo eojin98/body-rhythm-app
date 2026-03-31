@@ -2,7 +2,7 @@ import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-d
 import { useEffect, useState } from 'react'
 import { Capacitor } from '@capacitor/core'
 import { getSettings } from './utils/storage'
-import { checkAndFireAlarms, syncAllAlarmNotifications } from './utils/notifications'
+import { checkAndFireAlarms, syncAllAlarmNotifications, initNotificationChannels } from './utils/notifications'
 import Onboarding from './pages/Onboarding'
 import Home from './pages/Home'
 import MorningCheckin from './pages/MorningCheckin'
@@ -22,8 +22,10 @@ function AppContent() {
     if (!s.onboardingComplete) return
 
     if (Capacitor.isNativePlatform()) {
-      // Native: sync scheduled local notifications on startup
-      syncAllAlarmNotifications(s.alarms, s.testMode)
+      // Native: init channels then sync all alarms
+      initNotificationChannels().then(() => {
+        syncAllAlarmNotifications(s.alarms, s.testMode)
+      })
     } else {
       // Web/PWA: poll every 10 seconds to fire alarms at the right minute
       const tick = () => {

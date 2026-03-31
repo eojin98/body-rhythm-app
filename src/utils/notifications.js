@@ -1,9 +1,59 @@
 import { Capacitor } from '@capacitor/core'
 import { LocalNotifications } from '@capacitor/local-notifications'
-import { wasNotifFired, markNotifFired } from './storage'
+import { wasNotifFired, markNotifFired, getSettings } from './storage'
 import { ALARM_PERIODS, TEST_HOURLY_BEHAVIORS } from './alarmContent'
 
 const isNative = () => Capacitor.isNativePlatform()
+
+// ─── Notification Channels (Android 8+) ──────────────────────────────────────
+const CHANNEL_SOUND   = 'alarm_sound'
+const CHANNEL_VIBRATE = 'alarm_vibrate'
+const CHANNEL_SILENT  = 'alarm_silent'
+
+export async function initNotificationChannels() {
+  if (!isNative()) return
+  try {
+    await LocalNotifications.createChannel({
+      id: CHANNEL_SOUND,
+      name: '알람 (소리 + 진동)',
+      description: '소리와 진동으로 알람을 알립니다',
+      importance: 5,
+      vibration: true,
+      lights: true,
+      lightColor: '#6C5CE7',
+      visibility: 1,
+    })
+    await LocalNotifications.createChannel({
+      id: CHANNEL_VIBRATE,
+      name: '알람 (진동만)',
+      description: '진동으로만 알람을 알립니다',
+      importance: 5,
+      vibration: true,
+      sound: null,
+      lights: true,
+      lightColor: '#6C5CE7',
+      visibility: 1,
+    })
+    await LocalNotifications.createChannel({
+      id: CHANNEL_SILENT,
+      name: '알람 (무음)',
+      description: '소리와 진동 없이 알람을 표시합니다',
+      importance: 3,
+      vibration: false,
+      sound: null,
+      lights: false,
+      visibility: 1,
+    })
+  } catch (e) {
+    console.warn('Channel creation failed:', e)
+  }
+}
+
+function getChannelId(soundMode) {
+  if (soundMode === 'vibrate') return CHANNEL_VIBRATE
+  if (soundMode === 'silent') return CHANNEL_SILENT
+  return CHANNEL_SOUND
+}
 
 // Capacitor weekday: 1=Sun, 2=Mon, ..., 7=Sat
 // JS getDay():       0=Sun, 1=Mon, ..., 6=Sat
@@ -75,17 +125,20 @@ function buildNotifContent(alarm) {
 }
 
 // Schedule repeating weekly notifications for one alarm (one per enabled day)
-export async function scheduleAlarmNotifications(alarm) {
+export async function scheduleAlarmNotifications(alarm, soundMode) {
   if (!isNative()) return
   await cancelAlarmNotifications(alarm.id, [0, 1, 2, 3, 4, 5, 6])
   if (!alarm.enabled || alarm.days.length === 0) return
 
+  const mode = soundMode ?? getSettings().alarmSoundMode ?? 'sound'
+  const channelId = getChannelId(mode)
   const [hour, minute] = alarm.time.split(':').map(Number)
   const { title, body } = buildNotifContent(alarm)
   const notifications = alarm.days.map(dayIndex => ({
     id: toNotifId(alarm.id, dayIndex),
     title,
     body,
+    channelId,
     schedule: {
       on: { weekday: dayIndex + 1, hour, minute },
       repeats: true,
@@ -101,6 +154,7 @@ export async function scheduleSnoozeNotification(alarm) {
   if (!isNative()) return
   const { title, body } = buildNotifContent(alarm)
   const snoozeId = toNotifId(alarm.id, 8) // slot 8 = snooze
+  const channelId = getChannelId(getSettings().alarmSoundMode ?? 'sound')
   try {
     await LocalNotifications.cancel({ notifications: [{ id: snoozeId }] })
   } catch {}
@@ -109,6 +163,7 @@ export async function scheduleSnoozeNotification(alarm) {
       id: snoozeId,
       title,
       body,
+      channelId,
       schedule: {
         at: new Date(Date.now() + 30 * 60 * 1000),
         allowWhileIdle: true,
@@ -133,6 +188,7 @@ const TEST_HOURLY_NOTIF_BASE_ID = 9000
 export async function scheduleTestHourlyNotifications() {
   if (!isNative()) return
   await cancelTestHourlyNotifications()
+  const channelId = getChannelId(getSettings().alarmSoundMode ?? 'sound')
   const notifications = []
   for (let h = 7; h <= 23; h++) {
     const hk = String(h).padStart(2, '0')
@@ -144,6 +200,7 @@ export async function scheduleTestHourlyNotifications() {
       id: TEST_HOURLY_NOTIF_BASE_ID + h,
       title: `⏰ ${period} ${dh}:00 루틴`,
       body: behavior.title,
+      channelId,
       schedule: {
         on: { hour: h, minute: 0 },
         repeats: true,

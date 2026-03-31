@@ -39,6 +39,7 @@ const DEFAULT_SETTINGS = {
   alarms: DEFAULT_ALARMS,
   behaviors: {},
   testMode: false,
+  alarmSoundMode: 'sound', // 'sound' | 'vibrate' | 'silent'
   appVersion: APP_VERSION,
 }
 
