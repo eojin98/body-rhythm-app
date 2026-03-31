@@ -1,7 +1,7 @@
 import { Capacitor } from '@capacitor/core'
 import { LocalNotifications } from '@capacitor/local-notifications'
 import { wasNotifFired, markNotifFired } from './storage'
-import { ALARM_PERIODS } from './alarmContent'
+import { ALARM_PERIODS, TEST_HOURLY_BEHAVIORS } from './alarmContent'
 
 const isNative = () => Capacitor.isNativePlatform()
 
@@ -127,11 +127,50 @@ export async function cancelAlarmNotifications(alarmId, days = [0, 1, 2, 3, 4, 5
   }
 }
 
+// Test mode: hourly notifications 7:00–23:00 every day (IDs 9007–9023)
+const TEST_HOURLY_NOTIF_BASE_ID = 9000
+
+export async function scheduleTestHourlyNotifications() {
+  if (!isNative()) return
+  await cancelTestHourlyNotifications()
+  const notifications = []
+  for (let h = 7; h <= 23; h++) {
+    const hk = String(h).padStart(2, '0')
+    const behavior = TEST_HOURLY_BEHAVIORS[hk]
+    if (!behavior) continue
+    const dh = h === 0 ? 12 : h > 12 ? h - 12 : h
+    const period = h < 12 ? '오전' : '오후'
+    notifications.push({
+      id: TEST_HOURLY_NOTIF_BASE_ID + h,
+      title: `⏰ ${period} ${dh}:00 루틴`,
+      body: behavior.title,
+      schedule: {
+        on: { hour: h, minute: 0 },
+        repeats: true,
+        allowWhileIdle: true,
+      },
+    })
+  }
+  await LocalNotifications.schedule({ notifications })
+}
+
+export async function cancelTestHourlyNotifications() {
+  if (!isNative()) return
+  const ids = []
+  for (let h = 7; h <= 23; h++) ids.push({ id: TEST_HOURLY_NOTIF_BASE_ID + h })
+  try { await LocalNotifications.cancel({ notifications: ids }) } catch {}
+}
+
 // Re-sync all alarms on app start (native only)
-export async function syncAllAlarmNotifications(alarms) {
+export async function syncAllAlarmNotifications(alarms, testMode = false) {
   if (!isNative()) return
   for (const alarm of alarms) {
     await scheduleAlarmNotifications(alarm)
+  }
+  if (testMode) {
+    await scheduleTestHourlyNotifications()
+  } else {
+    await cancelTestHourlyNotifications()
   }
 }
 

@@ -13,8 +13,15 @@ export default function Records() {
 
   useEffect(() => {
     refresh()
+    const id = setInterval(refresh, 5000)
+    const onVisible = () => { if (!document.hidden) refresh() }
+    document.addEventListener('visibilitychange', onVisible)
     window.addEventListener('focus', refresh)
-    return () => window.removeEventListener('focus', refresh)
+    return () => {
+      clearInterval(id)
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', refresh)
+    }
   }, [])
 
   const prevMonth = () => {

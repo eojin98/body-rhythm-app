@@ -91,7 +91,7 @@ export default function Home() {
       // Test mode: fire browser notification at the start of each hour
       if (s.testMode && !Capacitor.isNativePlatform()) {
         const m = nowDate.getMinutes()
-        if (m < 1) {
+        if (m < 2) {
           const h = nowDate.getHours()
           const hk = String(h).padStart(2, '0')
           const b = TEST_HOURLY_BEHAVIORS[hk]
@@ -105,7 +105,7 @@ export default function Home() {
       }
     }
     tick()
-    const id = setInterval(tick, 30000)
+    const id = setInterval(tick, 10000)
     return () => clearInterval(id)
   }, [])
 

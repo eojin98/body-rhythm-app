@@ -23,15 +23,15 @@ function AppContent() {
 
     if (Capacitor.isNativePlatform()) {
       // Native: sync scheduled local notifications on startup
-      syncAllAlarmNotifications(s.alarms)
+      syncAllAlarmNotifications(s.alarms, s.testMode)
     } else {
-      // Web/PWA: poll every 30 seconds to fire alarms at the right minute
+      // Web/PWA: poll every 10 seconds to fire alarms at the right minute
       const tick = () => {
         const settings = getSettings()
         if (settings.onboardingComplete) checkAndFireAlarms(settings.alarms)
       }
       tick()
-      const id = setInterval(tick, 30000)
+      const id = setInterval(tick, 10000)
       window.addEventListener('focus', tick)
       return () => {
         clearInterval(id)

@@ -6,6 +6,7 @@ import {
   getPermissionStatus,
   checkPermissionStatusAsync,
   scheduleAlarmNotifications,
+  syncAllAlarmNotifications,
 } from '../utils/notifications'
 import { ALARM_PERIODS, PERIOD_ORDER, getEffectiveBehaviors } from '../utils/alarmContent'
 
@@ -97,7 +98,11 @@ export default function Settings() {
               <input
                 type="checkbox"
                 checked={settings.testMode || false}
-                onChange={() => persistSettings({ ...settings, testMode: !settings.testMode })}
+                onChange={() => {
+                  const updated = { ...settings, testMode: !settings.testMode }
+                  persistSettings(updated)
+                  syncAllAlarmNotifications(updated.alarms, updated.testMode)
+                }}
               />
               <div className="toggle-track" />
             </label>
