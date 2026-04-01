@@ -143,6 +143,7 @@ export async function scheduleAlarmNotifications(alarm, soundMode) {
       on: { weekday: dayIndex + 1, hour, minute },
       repeats: true,
       allowWhileIdle: true,
+      exact: true,
     },
   }))
 
@@ -167,6 +168,7 @@ export async function scheduleSnoozeNotification(alarm) {
       schedule: {
         at: new Date(Date.now() + 30 * 60 * 1000),
         allowWhileIdle: true,
+        exact: true,
       },
     }],
   })
@@ -205,6 +207,7 @@ export async function scheduleTestHourlyNotifications() {
         on: { hour: h, minute: 0 },
         repeats: true,
         allowWhileIdle: true,
+        exact: true,
       },
     })
   }

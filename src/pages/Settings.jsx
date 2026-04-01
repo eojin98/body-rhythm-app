@@ -71,10 +71,15 @@ export default function Settings() {
                 {notifStatus === 'granted' ? '허용됨' : notifStatus === 'denied' ? '차단됨' : '미설정'}
               </div>
             </div>
-            {notifStatus !== 'granted'
-              ? <button className="btn btn-secondary btn-sm" onClick={handleRequestNotif}>허용하기</button>
-              : <div style={{ fontSize: 24 }}>✅</div>
-            }
+            <label className="toggle-wrap">
+              <input
+                type="checkbox"
+                checked={notifStatus === 'granted'}
+                onChange={notifStatus !== 'granted' ? handleRequestNotif : undefined}
+                readOnly={notifStatus === 'granted'}
+              />
+              <div className="toggle-track" />
+            </label>
           </div>
           {notifStatus !== 'granted' && (
             <div style={{ marginTop: 12, padding: '10px 12px', background: '#FFF8E6', borderRadius: 10, fontSize: 12, color: '#7A5800', lineHeight: 1.5 }}>

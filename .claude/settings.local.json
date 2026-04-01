@@ -4,7 +4,8 @@
       "Bash(npm install:*)",
       "Bash(npm run:*)",
       "Bash(npx cap:*)",
-      "Bash(ngrok config:*)"
+      "Bash(ngrok config:*)",
+      "Bash(xargs grep:*)"
     ]
   }
 }
