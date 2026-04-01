@@ -146,3 +146,91 @@ export const TEST_HOURLY_BEHAVIORS = {
 export function getEffectiveBehaviors(periodId, customBehaviors) {
   return customBehaviors?.[periodId] ?? ALARM_PERIODS[periodId]?.behaviors ?? []
 }
+
+// ─── 시간대별 행동 원리 가이드 ─────────────────────────────────────────────────
+export const TIME_PERIOD_GUIDES = [
+  {
+    hours: [5, 6, 7, 8],
+    title: '아침 기상 타임',
+    icon: '🌅',
+    gradient: 'linear-gradient(135deg, #F6D365 0%, #FDA085 100%)',
+    darkText: true,
+    headline: '생체시계를 켜는 황금 3가지',
+    body: '기상 후 햇빛이 눈에 닿으면 시상하부의 시교차상핵이 활성화되고 코르티솔이 자연스럽게 최고조에 오릅니다. 이 시간에 햇빛·물·움직임 3가지를 실천하면 하루 리듬이 안정됩니다.',
+    tip: '🌿 커튼 열기 → 물 한 잔 → 5분 스트레칭 순서를 추천해요.',
+  },
+  {
+    hours: [9, 10, 11],
+    title: '오전 집중 타임',
+    icon: '🧠',
+    gradient: 'linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)',
+    darkText: false,
+    headline: '두뇌 퍼포먼스 최고조 시간',
+    body: '코르티솔과 도파민이 함께 높아지는 오전 9~11시는 인지 능력과 단기 기억이 하루 중 가장 뛰어납니다. 창의적 사고, 중요한 결정, 어려운 학습은 이 시간에 집중하세요.',
+    tip: '📵 알림을 끄고 25분 집중 + 5분 휴식(포모도로)을 시도해보세요.',
+  },
+  {
+    hours: [12, 13],
+    title: '점심 소화 타임',
+    icon: '🥗',
+    gradient: 'linear-gradient(135deg, #43E97B 0%, #38F9D7 100%)',
+    darkText: true,
+    headline: '천천히 씹고, 식후엔 걸어요',
+    body: '점심 후 혈당이 급격히 오르면 인슐린 과다 분비로 오후 졸음이 옵니다. 천천히 씹어 먹고 식후 10분 걷기를 하면 혈당 스파이크를 줄이고 오후 집중력을 유지할 수 있습니다.',
+    tip: '🚶 식후 10분 산책만으로 오후 졸음을 크게 줄일 수 있어요.',
+  },
+  {
+    hours: [14, 15, 16],
+    title: '오후 슬럼프 타임',
+    icon: '☀️',
+    gradient: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+    darkText: false,
+    headline: '생체 슬럼프, 이렇게 극복해요',
+    body: '오후 2~4시는 대부분 사람에게 졸음과 집중력 저하가 오는 "생체 슬럼프 구간"입니다. 10~20분 짧은 낮잠이나 가벼운 스트레칭은 이후 생산성을 크게 높여줍니다.',
+    tip: '💧 물 한 컵 + 2분 스트레칭으로 슬럼프를 돌파해보세요.',
+  },
+  {
+    hours: [17, 18, 19],
+    title: '저녁 활동 타임',
+    icon: '🌆',
+    gradient: 'linear-gradient(135deg, #6C5CE7 0%, #a29bfe 100%)',
+    darkText: false,
+    headline: '운동 효율이 가장 높은 시간대',
+    body: '체온이 하루 중 최고조에 달하는 저녁 5~7시는 근력과 유연성이 가장 높아 운동 효율이 좋습니다. 저녁 식사는 취침 3시간 전에 마쳐야 수면의 질이 높아집니다.',
+    tip: '🏃 30분 유산소 운동 후 저녁 식사, 취침 전 3시간 확보를 권해요.',
+  },
+  {
+    hours: [20, 21],
+    title: '하루 마무리 타임',
+    icon: '🌇',
+    gradient: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+    darkText: true,
+    headline: '멜라토닌이 분비되기 시작해요',
+    body: '저녁 8~9시부터 멜라토닌 분비가 시작됩니다. 이 시간에 블루라이트를 줄이면 수면 준비를 자연스럽게 앞당길 수 있습니다. 오늘을 정리하고 내일 계획을 짧게 메모해두세요.',
+    tip: '📝 하루 감사 일기 3줄 + 내일 핵심 3가지를 적어보세요.',
+  },
+  {
+    hours: [22, 23, 0],
+    title: '취침 준비 타임',
+    icon: '🌙',
+    gradient: 'linear-gradient(135deg, #2C3E50 0%, #4CA1AF 100%)',
+    darkText: false,
+    headline: '수면이 곧 내일의 에너지예요',
+    body: '수면 중 뇌는 기억을 정리하고, 성장 호르몬이 분비되며, 면역 시스템이 회복됩니다. 규칙적인 취침 시간이 생체시계를 안정시키고 수면의 질을 결정하는 핵심 요소입니다.',
+    tip: '📵 핸드폰은 침대 밖에, 실내 온도는 18~20°C를 유지해보세요.',
+  },
+  {
+    hours: [1, 2, 3, 4],
+    title: '심야 휴식 타임',
+    icon: '⭐',
+    gradient: 'linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%)',
+    darkText: false,
+    headline: '지금은 자야 할 시간이에요',
+    body: '새벽 1~4시는 생체리듬상 체온과 코르티솔이 가장 낮은 시간입니다. 이 시간에 깨어 있으면 다음 날 인지 기능과 면역력이 저하됩니다. 지금 바로 수면을 취하는 게 최선입니다.',
+    tip: '😴 핸드폰을 내려놓고 바로 자리에 누워보세요.',
+  },
+]
+
+export function getCurrentPeriodGuide(hour) {
+  return TIME_PERIOD_GUIDES.find(g => g.hours.includes(hour)) ?? null
+}

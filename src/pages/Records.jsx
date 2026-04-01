@@ -274,11 +274,11 @@ function RecordDetail({ record, dateKey, onUpdate }) {
                       onClick={() => setEditingKey(k)}
                       style={{
                         fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 20, border: 'none', cursor: 'pointer',
-                        background: status === 'done' ? '#E6FBF5' : status === 'skipped' ? '#FFF8E6' : '#F5F5F5',
-                        color: status === 'done' ? '#00B894' : status === 'skipped' ? '#E67E22' : '#CCC',
+                        background: status === 'done' ? '#E6FBF5' : status === 'skipped' ? '#FFF8E6' : status === 'missed' ? '#FFF0F0' : '#F5F5F5',
+                        color: status === 'done' ? '#00B894' : status === 'skipped' ? '#E67E22' : status === 'missed' ? '#FF7675' : '#CCC',
                       }}
                     >
-                      {status === 'done' ? '✅ 완료' : status === 'skipped' ? '⏭ 건너뜀' : '— 기록 없음'} ✏️
+                      {status === 'done' ? '✅ 완료' : status === 'skipped' ? '⏭ 건너뜀' : status === 'missed' ? '❌ 미실행' : '— 기록 없음'} ✏️
                     </button>
                   ) : (
                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
@@ -319,11 +319,11 @@ function RecordDetail({ record, dateKey, onUpdate }) {
                       onClick={() => setEditingKey(pid)}
                       style={{
                         fontSize: 12, fontWeight: 600, padding: '3px 10px', borderRadius: 20, border: 'none', cursor: 'pointer',
-                        background: status === 'done' ? '#E6FBF5' : status === 'skipped' ? '#FFF8E6' : '#F5F5F5',
-                        color: status === 'done' ? '#00B894' : status === 'skipped' ? '#E67E22' : '#CCC',
+                        background: status === 'done' ? '#E6FBF5' : status === 'skipped' ? '#FFF8E6' : status === 'missed' ? '#FFF0F0' : '#F5F5F5',
+                        color: status === 'done' ? '#00B894' : status === 'skipped' ? '#E67E22' : status === 'missed' ? '#FF7675' : '#CCC',
                       }}
                     >
-                      {status === 'done' ? '✅ 완료' : status === 'skipped' ? '⏭ 건너뜀' : '— 기록 없음'} ✏️
+                      {status === 'done' ? '✅ 완료' : status === 'skipped' ? '⏭ 건너뜀' : status === 'missed' ? '❌ 미실행' : '— 기록 없음'} ✏️
                     </button>
                   ) : (
                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>

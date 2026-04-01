@@ -125,8 +125,12 @@ export function calculatePracticeRate(record) {
     const done = testEntries.filter(([, v]) => v?.status === 'done').length
     return Math.round((done / testEntries.length) * 100)
   }
-  const doneCount = ROUTINE_PERIOD_IDS.filter(pid => record.routines?.[pid]?.status === 'done').length
-  return Math.round((doneCount / ROUTINE_PERIOD_IDS.length) * 100)
+  // Regular mode: use entries with any explicit status as denominator
+  // (done, missed, skipped all count — null = not yet recorded)
+  const explicit = ROUTINE_PERIOD_IDS.filter(pid => record.routines?.[pid]?.status != null)
+  if (!explicit.length) return 0
+  const done = explicit.filter(pid => record.routines[pid].status === 'done').length
+  return Math.round((done / explicit.length) * 100)
 }
 
 // Time-aware practice rate for home screen (only counts alarms that have already fired today)
@@ -282,6 +286,49 @@ export function setSnooze(periodId, untilMs) {
     data[periodId] = untilMs
     localStorage.setItem(keys().snooze, JSON.stringify(data))
   } catch {}
+}
+
+// Auto-mark past alarms with no status as 'missed'
+// Call from Home tick. testHourKeys = Object.keys(TEST_HOURLY_BEHAVIORS)
+export function autoMarkMissedRoutines(settings, testHourKeys = []) {
+  if (!settings) return
+  const today = getTodayKey()
+  const now = new Date()
+  const nowMins = now.getHours() * 60 + now.getMinutes()
+  const todayDay = now.getDay()
+  const record = getRecord(today)
+
+  const toMark = []
+
+  if (settings.testMode) {
+    // Test mode: past complete hours (< current hour) with no status
+    testHourKeys
+      .filter(hk => parseInt(hk, 10) < now.getHours())
+      .forEach(hk => {
+        const key = `test_${hk}`
+        if (!record?.routines?.[key]?.status) toMark.push(key)
+      })
+  } else {
+    // Regular mode: alarms > 120 min past with no status
+    settings.alarms
+      ?.filter(a => a.enabled && a.type && a.days.includes(todayDay))
+      .forEach(a => {
+        const [h, m] = a.time.split(':').map(Number)
+        if (nowMins - (h * 60 + m) > 120 && !record?.routines?.[a.type]?.status) {
+          toMark.push(a.type)
+        }
+      })
+  }
+
+  if (toMark.length === 0) return
+
+  const records = getRecords()
+  const rec = records[today] || {}
+  const updatedAt = new Date().toISOString()
+  const routines = { ...rec.routines }
+  toMark.forEach(key => { routines[key] = { status: 'missed', updatedAt } })
+  records[today] = { ...rec, routines }
+  localStorage.setItem(keys().records, JSON.stringify(records))
 }
 
 // Returns a small sequential integer safe for use as a Capacitor notification ID
