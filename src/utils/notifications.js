@@ -150,8 +150,8 @@ export async function scheduleAlarmNotifications(alarm, soundMode) {
   await LocalNotifications.schedule({ notifications })
 }
 
-// Schedule a one-time snooze notification 30 minutes from now (native only)
-export async function scheduleSnoozeNotification(alarm) {
+// Schedule a one-time snooze notification (native only)
+export async function scheduleSnoozeNotification(alarm, snoozeMins = 30) {
   if (!isNative()) return
   const { title, body } = buildNotifContent(alarm)
   const snoozeId = toNotifId(alarm.id, 8) // slot 8 = snooze
@@ -166,7 +166,34 @@ export async function scheduleSnoozeNotification(alarm) {
       body,
       channelId,
       schedule: {
-        at: new Date(Date.now() + 30 * 60 * 1000),
+        at: new Date(Date.now() + snoozeMins * 60 * 1000),
+        allowWhileIdle: true,
+        exact: true,
+      },
+    }],
+  })
+}
+
+// Schedule a one-time snooze for test-mode hourly alarms (ID 9098, fixed slot)
+const TEST_SNOOZE_NOTIF_ID = 9098
+
+export async function scheduleTestSnoozeNotification(hk, behavior, snoozeMins = 10) {
+  if (!isNative()) return
+  const h = parseInt(hk, 10)
+  const dh = h === 0 ? 12 : h > 12 ? h - 12 : h
+  const period = h < 12 ? '오전' : '오후'
+  const channelId = getChannelId(getSettings().alarmSoundMode ?? 'sound')
+  try {
+    await LocalNotifications.cancel({ notifications: [{ id: TEST_SNOOZE_NOTIF_ID }] })
+  } catch {}
+  await LocalNotifications.schedule({
+    notifications: [{
+      id: TEST_SNOOZE_NOTIF_ID,
+      title: `⏰ ${period} ${dh}:00 루틴`,
+      body: behavior?.title ?? '루틴 알람',
+      channelId,
+      schedule: {
+        at: new Date(Date.now() + snoozeMins * 60 * 1000),
         allowWhileIdle: true,
         exact: true,
       },

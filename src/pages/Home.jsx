@@ -13,6 +13,7 @@ import {
   checkPermissionStatusAsync,
   scheduleAlarmNotifications,
   scheduleSnoozeNotification,
+  scheduleTestSnoozeNotification,
   showNotification,
 } from '../utils/notifications'
 import { ALARM_PERIODS, getEffectiveBehaviors, TEST_HOURLY_BEHAVIORS, getCurrentPeriodGuide } from '../utils/alarmContent'
@@ -124,17 +125,23 @@ export default function Home() {
     if (alarm) await scheduleAlarmNotifications(alarm)
   }
 
-  const handleRoutineAction = (periodId, action) => {
+  const handleRoutineAction = async (periodId, action, snoozeMins = 30) => {
     const today = getTodayKey()
     if (action === 'done' || action === 'skipped') {
       saveRoutineAction(today, periodId, action)
     } else if (action === 'clear') {
       clearRoutineAction(today, periodId)
     } else if (action === 'snooze') {
-      const snoozeMs = Date.now() + 30 * 60 * 1000
-      setSnooze(periodId, snoozeMs)
-      const alarm = settings.alarms.find(a => a.type === periodId)
-      if (alarm) scheduleSnoozeNotification(alarm)
+      setSnooze(periodId, Date.now() + snoozeMins * 60 * 1000)
+      if (periodId.startsWith('test_')) {
+        // 테스트 모드: 별도 알림 예약 (settings.alarms에 없음)
+        const hk = periodId.replace('test_', '')
+        const behavior = TEST_HOURLY_BEHAVIORS[hk]
+        await scheduleTestSnoozeNotification(hk, behavior, snoozeMins)
+      } else {
+        const alarm = settings.alarms.find(a => a.type === periodId)
+        if (alarm) await scheduleSnoozeNotification(alarm, snoozeMins)
+      }
     }
     const rec = getRecord(today)
     setTodayRecord(rec)
@@ -542,7 +549,7 @@ function ActiveRoutineCard({ alarm, onAction, behaviors }) {
         <button
           className="btn btn-secondary btn-sm"
           style={{ flex: 1 }}
-          onClick={() => onAction(alarm.type, 'snooze')}
+          onClick={() => onAction(alarm.type, 'snooze', 30)}
         >
           나중에 (30분)
         </button>
@@ -607,7 +614,7 @@ function TestAlarmCard({ hourKey, behavior, onAction }) {
 
       <div style={{ padding: '0 20px 16px', display: 'flex', gap: 8 }}>
         <button className="btn btn-ghost btn-sm" style={{ flex: 1, color: '#A0A0B8', background: '#F5F5F5' }} onClick={() => onAction(routineKey, 'skipped')}>건너뛰기</button>
-        <button className="btn btn-secondary btn-sm" style={{ flex: 1 }} onClick={() => onAction(routineKey, 'snooze')}>나중에 (30분)</button>
+        <button className="btn btn-secondary btn-sm" style={{ flex: 1 }} onClick={() => onAction(routineKey, 'snooze', 10)}>나중에 (10분)</button>
         <button className="btn btn-primary btn-sm" style={{ flex: 2 }} onClick={() => onAction(routineKey, 'done')}>완료 ✓</button>
       </div>
     </div>
