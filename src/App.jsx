@@ -9,6 +9,7 @@ import MorningCheckin from './pages/MorningCheckin'
 import Records from './pages/Records'
 import Dashboard from './pages/Dashboard'
 import Settings from './pages/Settings'
+import CircadianDetailPage from './pages/CircadianDetailPage'
 import BottomNav from './components/BottomNav'
 
 function AppContent() {
@@ -55,10 +56,11 @@ function AppContent() {
           <Route path="/records" element={<Records />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/circadian-detail" element={<CircadianDetailPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
-      {location.pathname !== '/checkin' && <BottomNav />}
+      {location.pathname !== '/checkin' && location.pathname !== '/circadian-detail' && <BottomNav />}
     </>
   )
 }

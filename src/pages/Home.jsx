@@ -17,6 +17,7 @@ import {
   showNotification,
 } from '../utils/notifications'
 import { ALARM_PERIODS, getEffectiveBehaviors, TEST_HOURLY_BEHAVIORS, getCurrentPeriodGuide } from '../utils/alarmContent'
+import { getCurrentHourData, PHASE_COLORS } from '../data/circadianGuide'
 import ProgressRing from '../components/ProgressRing'
 
 // Find the test mode hourly alarm for the current hour
@@ -183,7 +184,26 @@ export default function Home() {
     ? firedTestAlarms.filter(t => t.status === 'done').length
     : firedRegularAlarms.filter(a => todayRecord?.routines?.[a.type]?.status === 'done').length
 
+  const [hourData, setHourData] = useState(() => getCurrentHourData())
   const [editingKey, setEditingKey] = useState(null)
+
+  // 매 정각마다 시간대 데이터 갱신
+  useEffect(() => {
+    function scheduleNextHourUpdate() {
+      const n = new Date()
+      const msUntilNextHour =
+        (60 - n.getMinutes()) * 60 * 1000
+        - n.getSeconds() * 1000
+        - n.getMilliseconds()
+      const t = setTimeout(() => {
+        setHourData(getCurrentHourData())
+        scheduleNextHourUpdate()
+      }, msUntilNextHour)
+      return t
+    }
+    const t = scheduleNextHourUpdate()
+    return () => clearTimeout(t)
+  }, [])
 
   const greetings = () => {
     const h = now.getHours()
@@ -286,30 +306,54 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Current Period Guide */}
+      {/* Current Hour Circadian Guide Card */}
       {(() => {
-        const guide = getCurrentPeriodGuide(now.getHours())
-        if (!guide) return null
-        const isDark = guide.darkText
-        const txt = isDark ? '#1E1E2E' : 'white'
-        const txtSub = isDark ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.8)'
+        const colors = PHASE_COLORS[hourData.phase]
         return (
           <div className="section">
             <div className="section-title">지금 이 시간</div>
-            <div className="card" style={{ overflow: 'hidden' }}>
-              <div style={{ background: guide.gradient, padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 12 }}>
-                <span style={{ fontSize: 28 }}>{guide.icon}</span>
-                <div>
-                  <div style={{ fontSize: 12, color: txtSub, marginBottom: 2 }}>시간대 행동 원리</div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: txt }}>{guide.title}</div>
+            <div className="card" style={{ background: colors.bg, overflow: 'hidden', border: 'none' }}>
+              {/* Header */}
+              <div style={{ padding: '16px 20px 10px' }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: colors.accent, marginBottom: 3 }}>
+                  {hourData.phaseName} · {hourData.stateName}
+                </div>
+                <div style={{ fontSize: 11, color: colors.text, opacity: 0.5 }}>
+                  {String(now.getHours()).padStart(2, '0')}:00 기준
                 </div>
               </div>
-              <div style={{ padding: '14px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: '#1E1E2E' }}>{guide.headline}</div>
-                <div style={{ fontSize: 13, color: '#6E6E8A', lineHeight: 1.65 }}>{guide.body}</div>
-                <div style={{ fontSize: 12, color: '#7C6FCF', padding: '8px 12px', background: '#F5F4FF', borderRadius: 10, lineHeight: 1.5 }}>
-                  {guide.tip}
+              {/* Actions */}
+              <div style={{ padding: '0 20px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {hourData.actions.slice(0, 2).map((action, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{
+                      width: 7, height: 7, borderRadius: '50%',
+                      background: colors.accent, flexShrink: 0,
+                    }} />
+                    <span style={{ fontSize: 14, fontWeight: 600, color: colors.text }}>{action.label}</span>
+                  </div>
+                ))}
+              </div>
+              {/* Warning */}
+              {hourData.warnings.length > 0 && (
+                <div style={{ margin: '0 20px 12px', padding: '8px 12px', background: 'rgba(0,0,0,0.06)', borderRadius: 10 }}>
+                  <span style={{ fontSize: 13, color: colors.text }}>
+                    ⚠ {hourData.warnings[0].label}
+                  </span>
                 </div>
+              )}
+              {/* Detail button */}
+              <div style={{ padding: '0 20px 16px' }}>
+                <button
+                  onClick={() => navigate('/circadian-detail')}
+                  style={{
+                    width: '100%', background: colors.accent, color: 'white',
+                    border: 'none', borderRadius: 10, padding: '10px 16px',
+                    fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                  }}
+                >
+                  자세히 보기 →
+                </button>
               </div>
             </div>
           </div>
