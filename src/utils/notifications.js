@@ -211,6 +211,16 @@ export async function cancelAlarmNotifications(alarmId, days = [0, 1, 2, 3, 4, 5
   }
 }
 
+export async function cancelAllAlarmNotifications(alarms) {
+  if (!isNative()) return
+  for (const alarm of alarms) {
+    await cancelAlarmNotifications(alarm.id, [0, 1, 2, 3, 4, 5, 6])
+    try { await LocalNotifications.cancel({ notifications: [{ id: toNotifId(alarm.id, 8) }] }) } catch {}
+  }
+  await cancelTestHourlyNotifications()
+  try { await LocalNotifications.cancel({ notifications: [{ id: TEST_SNOOZE_NOTIF_ID }] }) } catch {}
+}
+
 // Test mode: hourly notifications 7:00–23:00 every day (IDs 9007–9023)
 const TEST_HOURLY_NOTIF_BASE_ID = 9000
 
@@ -251,6 +261,11 @@ export async function cancelTestHourlyNotifications() {
 // Re-sync all alarms on app start (native only)
 export async function syncAllAlarmNotifications(alarms, testMode = false) {
   if (!isNative()) return
+  const settings = getSettings()
+  if (settings.notificationsEnabled === false) {
+    await cancelAllAlarmNotifications(alarms)
+    return
+  }
   for (const alarm of alarms) {
     await scheduleAlarmNotifications(alarm)
   }
@@ -286,6 +301,7 @@ export function showNotification(title, body) {
 // Web-only polling: called every 30s to fire alarms at the right minute
 export function checkAndFireAlarms(alarms) {
   if (isNative() || !alarms || Notification.permission !== 'granted') return
+  if (getSettings().notificationsEnabled === false) return
 
   const now = new Date()
   const hh = String(now.getHours()).padStart(2, '0')

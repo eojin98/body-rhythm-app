@@ -1,12 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Capacitor } from '@capacitor/core'
-import { getSettings, saveSettings, DAY_NAMES, APP_VERSION } from '../utils/storage'
+import { getSettings, saveSettings, DAY_NAMES, APP_VERSION, exportAllData, importAllData } from '../utils/storage'
 import {
   requestNotificationPermission,
   getPermissionStatus,
   checkPermissionStatusAsync,
   scheduleAlarmNotifications,
   syncAllAlarmNotifications,
+  cancelAllAlarmNotifications,
   initNotificationChannels,
 } from '../utils/notifications'
 import { ALARM_PERIODS, PERIOD_ORDER, getEffectiveBehaviors } from '../utils/alarmContent'
@@ -14,6 +15,8 @@ import { ALARM_PERIODS, PERIOD_ORDER, getEffectiveBehaviors } from '../utils/ala
 export default function Settings() {
   const [settings, setSettings] = useState(getSettings)
   const [notifStatus, setNotifStatus] = useState(getPermissionStatus)
+  const [importMsg, setImportMsg] = useState(null)
+  const fileInputRef = useRef(null)
 
   useEffect(() => {
     checkPermissionStatusAsync().then(setNotifStatus)
@@ -34,9 +37,54 @@ export default function Settings() {
     if (alarm) await scheduleAlarmNotifications(alarm)
   }
 
-  const handleRequestNotif = async () => {
-    const result = await requestNotificationPermission()
-    setNotifStatus(result)
+  const handleToggleNotifications = async () => {
+    const currentlyEnabled = settings.notificationsEnabled !== false
+    if (currentlyEnabled) {
+      // 알림 끄기: 모든 예약된 알림 취소
+      const updated = { ...settings, notificationsEnabled: false }
+      persistSettings(updated)
+      await cancelAllAlarmNotifications(updated.alarms)
+    } else {
+      // 알림 켜기: 권한 요청 후 알림 재등록
+      const updated = { ...settings, notificationsEnabled: true }
+      persistSettings(updated)
+      if (notifStatus !== 'granted') {
+        const result = await requestNotificationPermission()
+        setNotifStatus(result)
+      }
+      await syncAllAlarmNotifications(updated.alarms, updated.testMode)
+    }
+  }
+
+  const handleExport = () => {
+    const data = exportAllData()
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `bodyrhythm_backup_${new Date().toISOString().slice(0, 10)}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleImport = (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (evt) => {
+      try {
+        const data = JSON.parse(evt.target.result)
+        importAllData(data)
+        const restored = getSettings()
+        setSettings(restored)
+        setImportMsg({ type: 'success', text: '데이터를 성공적으로 가져왔습니다. 앱을 새로고침하면 모두 적용됩니다.' })
+        syncAllAlarmNotifications(restored.alarms, restored.testMode)
+      } catch {
+        setImportMsg({ type: 'error', text: '파일을 읽는 중 오류가 발생했습니다. 올바른 백업 파일인지 확인하세요.' })
+      }
+      e.target.value = ''
+    }
+    reader.readAsText(file)
   }
 
   const handleBehaviorChange = (periodId, behaviors) => {
@@ -66,22 +114,25 @@ export default function Settings() {
         <div className="card card-body">
           <div className="row-between">
             <div>
-              <div style={{ fontSize: 15, fontWeight: 600 }}>알림 권한</div>
-              <div style={{ fontSize: 13, color: notifStatus === 'granted' ? '#00B894' : '#FF7675', marginTop: 2 }}>
-                {notifStatus === 'granted' ? '허용됨' : notifStatus === 'denied' ? '차단됨' : '미설정'}
+              <div style={{ fontSize: 15, fontWeight: 600 }}>알림 사용</div>
+              <div style={{ fontSize: 13, color: '#A0A0B8', marginTop: 2 }}>
+                {settings.notificationsEnabled !== false ? '알람 알림 켜짐' : '알람 알림 꺼짐'}
+                {' · '}
+                <span style={{ color: notifStatus === 'granted' ? '#00B894' : '#FF7675' }}>
+                  OS 권한 {notifStatus === 'granted' ? '허용' : notifStatus === 'denied' ? '차단' : '미설정'}
+                </span>
               </div>
             </div>
             <label className="toggle-wrap">
               <input
                 type="checkbox"
-                checked={notifStatus === 'granted'}
-                onChange={notifStatus !== 'granted' ? handleRequestNotif : undefined}
-                readOnly={notifStatus === 'granted'}
+                checked={settings.notificationsEnabled !== false}
+                onChange={handleToggleNotifications}
               />
               <div className="toggle-track" />
             </label>
           </div>
-          {notifStatus !== 'granted' && (
+          {notifStatus !== 'granted' && settings.notificationsEnabled !== false && (
             <div style={{ marginTop: 12, padding: '10px 12px', background: '#FFF8E6', borderRadius: 10, fontSize: 12, color: '#7A5800', lineHeight: 1.5 }}>
               {Capacitor.isNativePlatform()
                 ? '⚠️ 기기 설정 > 앱 > Body Rhythm 알람 > 알림에서 허용해주세요.'
@@ -199,6 +250,53 @@ export default function Settings() {
               onReset={() => handleBehaviorReset(periodId)}
             />
           ))}
+        </div>
+      </div>
+
+      {/* Data management */}
+      <div className="section">
+        <div className="section-title">데이터 관리</div>
+        <div className="card card-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <button
+            className="btn"
+            onClick={handleExport}
+            style={{ width: '100%', background: '#F5F4FF', color: '#6C5CE7', fontWeight: 600, padding: '12px', borderRadius: 12, border: 'none', cursor: 'pointer', fontSize: 14 }}
+          >
+            📤 데이터 내보내기
+          </button>
+          <div style={{ fontSize: 12, color: '#A0A0B8', lineHeight: 1.5, paddingLeft: 4 }}>
+            설정, 기록 등 모든 데이터를 JSON 파일로 저장합니다.
+          </div>
+          <div style={{ height: 1, background: '#F0EFF8', margin: '2px 0' }} />
+          <button
+            className="btn"
+            onClick={() => { setImportMsg(null); fileInputRef.current?.click() }}
+            style={{ width: '100%', background: '#F0F8FF', color: '#0984E3', fontWeight: 600, padding: '12px', borderRadius: 12, border: 'none', cursor: 'pointer', fontSize: 14 }}
+          >
+            📥 데이터 가져오기
+          </button>
+          <div style={{ fontSize: 12, color: '#A0A0B8', lineHeight: 1.5, paddingLeft: 4 }}>
+            백업 JSON 파일을 불러와 데이터를 복원합니다. 기존 데이터는 덮어씌워집니다.
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,application/json"
+            style={{ display: 'none' }}
+            onChange={handleImport}
+          />
+          {importMsg && (
+            <div style={{
+              padding: '10px 12px',
+              background: importMsg.type === 'success' ? '#E8F8F0' : '#FFE8E8',
+              borderRadius: 10,
+              fontSize: 13,
+              color: importMsg.type === 'success' ? '#00B894' : '#FF7675',
+              lineHeight: 1.5,
+            }}>
+              {importMsg.type === 'success' ? '✅' : '❌'} {importMsg.text}
+            </div>
+          )}
         </div>
       </div>
 

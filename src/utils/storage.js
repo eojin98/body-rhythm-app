@@ -40,6 +40,7 @@ const DEFAULT_SETTINGS = {
   behaviors: {},
   testMode: false,
   alarmSoundMode: 'sound', // 'sound' | 'vibrate' | 'silent'
+  notificationsEnabled: true,
   appVersion: APP_VERSION,
 }
 
@@ -336,4 +337,24 @@ export function generateId() {
   const settings = getSettings()
   const maxId = Math.max(0, ...settings.alarms.map(a => Number(a.id) || 0))
   return maxId + 1
+}
+
+// --- Data export / import ---
+
+export function exportAllData() {
+  return {
+    exportedAt: new Date().toISOString(),
+    version: APP_VERSION,
+    settings: getSettings(),
+    records: getRecords(),
+    notifLog: getNotifLog(),
+  }
+}
+
+export function importAllData(data) {
+  if (!data || typeof data !== 'object') throw new Error('유효하지 않은 데이터입니다.')
+  const k = keys()
+  if (data.settings) localStorage.setItem(k.settings, JSON.stringify(data.settings))
+  if (data.records) localStorage.setItem(k.records, JSON.stringify(data.records))
+  if (data.notifLog) localStorage.setItem(k.notifLog, JSON.stringify(data.notifLog))
 }
