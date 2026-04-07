@@ -1,9 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  IonSegment,
-  IonSegmentButton,
-  IonLabel,
   IonAccordion,
   IonAccordionGroup,
   IonItem,
@@ -12,7 +9,7 @@ import { CIRCADIAN_DATA, PHASE_COLORS, type CircadianHour } from '../data/circad
 
 // ── 상수 ──────────────────────────────────────────────────────────────────────
 
-const HOURS = CIRCADIAN_DATA.map(d => d.hour) // [6, 7, ..., 23]
+const HOURS = CIRCADIAN_DATA.map(d => d.hour)
 
 const STRENGTH_META: Record<string, { label: string; bg: string; color: string }> = {
   confirmed:   { label: '근거 확실', bg: '#D4EDDA', color: '#1A5C2E' },
@@ -21,19 +18,17 @@ const STRENGTH_META: Record<string, { label: string; bg: string; color: string }
   conditional: { label: '조건부',   bg: '#E2E3E5', color: '#41464B' },
 }
 
-// ── 헬퍼 ──────────────────────────────────────────────────────────────────────
-
 function getCurrentHour(): number {
-  const h = new Date().getHours()
-  return Math.min(Math.max(h, 6), 23)
+  return Math.min(Math.max(new Date().getHours(), 6), 23)
 }
 
-// ── 컴포넌트 ──────────────────────────────────────────────────────────────────
+// ── 메인 컴포넌트 ─────────────────────────────────────────────────────────────
 
 export default function CircadianDetailPage() {
   const navigate = useNavigate()
   const [selectedHour, setSelectedHour] = useState<number>(getCurrentHour)
-  const segmentRef = useRef<HTMLIonSegmentElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const btnRefs = useRef<(HTMLButtonElement | null)[]>([])
 
   const data: CircadianHour = CIRCADIAN_DATA.find(d => d.hour === selectedHour)!
   const colors = PHASE_COLORS[data.phase]
@@ -42,167 +37,189 @@ export default function CircadianDetailPage() {
   useEffect(() => {
     function scheduleUpdate() {
       const now = new Date()
-      const msUntilNextHour =
-        (60 - now.getMinutes()) * 60 * 1000
+      const ms =
+        (60 - now.getMinutes()) * 60_000
         - now.getSeconds() * 1000
         - now.getMilliseconds()
-      const t = setTimeout(() => {
-        setSelectedHour(getCurrentHour())
-        scheduleUpdate()
-      }, msUntilNextHour)
+      const t = setTimeout(() => { setSelectedHour(getCurrentHour()); scheduleUpdate() }, ms)
       return t
     }
     const t = scheduleUpdate()
     return () => clearTimeout(t)
   }, [])
 
-  // 선택 시간 변경 시 해당 탭으로 스크롤
+  // 선택된 시간 버튼을 가로 스크롤 중앙으로
   useEffect(() => {
-    const el = segmentRef.current
-    if (!el) return
-    const btn = el.querySelector<HTMLElement>(`[data-hour="${selectedHour}"]`)
-    btn?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
+    const idx = HOURS.indexOf(selectedHour)
+    const btn = btnRefs.current[idx]
+    if (!btn || !scrollRef.current) return
+    const container = scrollRef.current
+    const btnLeft = btn.offsetLeft
+    const btnWidth = btn.offsetWidth
+    const containerWidth = container.offsetWidth
+    container.scrollTo({
+      left: btnLeft - containerWidth / 2 + btnWidth / 2,
+      behavior: 'smooth',
+    })
   }, [selectedHour])
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', background: '#F7F6FF' }}>
+    // position:fixed 로 부모 page-content 레이아웃에서 탈출해 전체 화면 점유
+    <div style={{
+      position: 'fixed', inset: 0,
+      display: 'flex', flexDirection: 'column',
+      background: '#F4F3FB',
+      overflow: 'hidden',
+    }}>
 
       {/* ── 상단 헤더 ── */}
       <div style={{
         background: 'white',
-        padding: '16px 20px 0',
-        boxShadow: '0 1px 0 #EBEBF0',
+        paddingTop: 'env(safe-area-inset-top, 0px)',
         flexShrink: 0,
+        boxShadow: '0 1px 0 #EBEBF0',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+        {/* 타이틀 행 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px 10px' }}>
           <button
             onClick={() => navigate('/')}
             style={{
-              background: 'none', border: 'none', cursor: 'pointer',
-              fontSize: 20, color: '#6C5CE7', padding: 0, lineHeight: 1,
+              width: 36, height: 36, borderRadius: 10,
+              background: '#F0EFF8', border: 'none', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 18, color: '#6C5CE7', flexShrink: 0,
             }}
-            aria-label="홈으로 돌아가기"
+            aria-label="홈으로"
           >
             ←
           </button>
-          <div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: '#1E1E2E' }}>일주기 리듬 가이드</div>
-            <div style={{ fontSize: 12, color: '#A0A0B8', marginTop: 1 }}>시간별 신체 상태와 최적 행동</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: '#1E1E2E', lineHeight: 1.2 }}>
+              일주기 리듬 가이드
+            </div>
+            <div style={{ fontSize: 11, color: '#A0A0B8', marginTop: 1 }}>
+              시간별 신체 상태와 최적 행동
+            </div>
           </div>
         </div>
 
-        {/* ── 시간 탭 (IonSegment) ── */}
-        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', paddingBottom: 12 }}>
-          <IonSegment
-            ref={segmentRef}
-            value={String(selectedHour)}
-            scrollable
-            onIonChange={e => {
-              const v = Number(e.detail.value)
-              if (!isNaN(v)) setSelectedHour(v)
-            }}
-            style={{
-              '--background': 'transparent',
-              minWidth: 'max-content',
-            } as React.CSSProperties}
-          >
-            {HOURS.map(h => {
-              const d = CIRCADIAN_DATA.find(x => x.hour === h)!
-              const c = PHASE_COLORS[d.phase]
-              const isActive = h === selectedHour
-              return (
-                <IonSegmentButton
-                  key={h}
-                  value={String(h)}
-                  data-hour={h}
-                  style={{
-                    '--color': isActive ? c.accent : '#A0A0B8',
-                    '--color-checked': c.accent,
-                    '--indicator-color': c.accent,
-                    '--border-radius': '12px',
-                    minWidth: 56,
-                    '--padding-start': '8px',
-                    '--padding-end': '8px',
-                  } as React.CSSProperties}
-                >
-                  <IonLabel style={{ fontSize: 12, fontWeight: isActive ? 700 : 500 }}>
-                    {String(h).padStart(2, '0')}시
-                  </IonLabel>
-                </IonSegmentButton>
-              )
-            })}
-          </IonSegment>
+        {/* ── 시간 버튼 스크롤 ── */}
+        <div
+          ref={scrollRef}
+          style={{
+            display: 'flex',
+            overflowX: 'auto',
+            gap: 6,
+            padding: '0 16px 12px',
+            scrollbarWidth: 'none',
+            WebkitOverflowScrolling: 'touch',
+          } as React.CSSProperties}
+        >
+          {HOURS.map((h, idx) => {
+            const d = CIRCADIAN_DATA.find(x => x.hour === h)!
+            const c = PHASE_COLORS[d.phase]
+            const isActive = h === selectedHour
+            return (
+              <button
+                key={h}
+                ref={el => { btnRefs.current[idx] = el }}
+                onClick={() => setSelectedHour(h)}
+                style={{
+                  flexShrink: 0,
+                  minWidth: 52, height: 52,
+                  borderRadius: 14,
+                  border: isActive ? 'none' : `1.5px solid ${c.accent}33`,
+                  background: isActive ? c.accent : 'white',
+                  color: isActive ? 'white' : c.accent,
+                  fontSize: 13,
+                  fontWeight: isActive ? 800 : 500,
+                  cursor: 'pointer',
+                  display: 'flex', flexDirection: 'column',
+                  alignItems: 'center', justifyContent: 'center',
+                  gap: 1,
+                  transition: 'background 0.15s, color 0.15s',
+                  boxShadow: isActive ? `0 2px 8px ${c.accent}55` : 'none',
+                }}
+              >
+                <span style={{ fontSize: 15, fontWeight: isActive ? 800 : 600, lineHeight: 1 }}>
+                  {h}
+                </span>
+                <span style={{ fontSize: 9, opacity: isActive ? 0.85 : 0.5 }}>시</span>
+              </button>
+            )
+          })}
         </div>
       </div>
 
       {/* ── 본문 스크롤 영역 ── */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 16px 32px' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '10px 14px 24px' }}>
 
-        {/* ── 헤더 카드 ── */}
+        {/* ── 헤더 카드 (컴팩트) ── */}
         <div style={{
           background: colors.bg,
-          borderRadius: 16,
-          padding: '20px',
-          marginBottom: 12,
+          borderRadius: 14,
+          padding: '14px 16px',
+          marginBottom: 8,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
         }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
-            <div>
-              <div style={{ fontSize: 20, fontWeight: 800, color: colors.text, marginBottom: 4 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 18, fontWeight: 800, color: colors.text }}>
                 {String(data.hour).padStart(2, '0')}:00
-              </div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: colors.accent }}>
-                {data.phaseName}
-              </div>
-              <div style={{ fontSize: 13, color: colors.text, opacity: 0.7, marginTop: 2 }}>
-                {data.stateName}
-              </div>
-            </div>
-            {/* 에너지 레벨 배지 */}
-            <span style={{
-              fontSize: 12, fontWeight: 700,
-              background: colors.accent, color: 'white',
-              padding: '4px 12px', borderRadius: 20, whiteSpace: 'nowrap',
-            }}>
-              {data.energyLevel}
-            </span>
-          </div>
-
-          {/* 호르몬 태그 */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {data.hormones.map((h, i) => (
-              <span key={i} style={{
-                fontSize: 11, fontWeight: 600,
-                background: 'rgba(0,0,0,0.08)', color: colors.text,
-                padding: '4px 10px', borderRadius: 20,
-              }}>
-                {h}
               </span>
-            ))}
+              <span style={{ fontSize: 13, fontWeight: 700, color: colors.accent }}>
+                {data.phaseName}
+              </span>
+              <span style={{ fontSize: 12, color: colors.text, opacity: 0.65 }}>
+                · {data.stateName}
+              </span>
+            </div>
+            {/* 호르몬 태그 */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>
+              {data.hormones.map((h, i) => (
+                <span key={i} style={{
+                  fontSize: 10, fontWeight: 600,
+                  background: 'rgba(0,0,0,0.08)', color: colors.text,
+                  padding: '3px 8px', borderRadius: 20,
+                }}>
+                  {h}
+                </span>
+              ))}
+            </div>
           </div>
+          {/* 에너지 배지 */}
+          <span style={{
+            fontSize: 11, fontWeight: 700, flexShrink: 0,
+            background: colors.accent, color: 'white',
+            padding: '5px 11px', borderRadius: 20,
+            alignSelf: 'flex-start',
+          }}>
+            {data.energyLevel}
+          </span>
         </div>
 
         {/* ── 권장 행동 ── */}
         <Section title="✅ 지금 할 일">
           {data.actions.map((a, i) => (
             <div key={i} style={{
-              display: 'flex', gap: 12, alignItems: 'flex-start',
-              paddingBottom: i < data.actions.length - 1 ? 14 : 0,
+              display: 'flex', gap: 10, alignItems: 'flex-start',
+              paddingBottom: i < data.actions.length - 1 ? 10 : 0,
               borderBottom: i < data.actions.length - 1 ? '1px solid #F0EFF8' : 'none',
-              marginBottom: i < data.actions.length - 1 ? 14 : 0,
+              marginBottom: i < data.actions.length - 1 ? 10 : 0,
             }}>
               <div style={{
-                width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+                width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
                 background: colors.accent,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: 'white', fontSize: 12, fontWeight: 700,
+                color: 'white', fontSize: 11, fontWeight: 700, marginTop: 1,
               }}>
                 {i + 1}
               </div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: '#1E1E2E', marginBottom: 4 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#1E1E2E', marginBottom: 2 }}>
                   {a.label}
                 </div>
-                <div style={{ fontSize: 12, color: '#6E6E8A', lineHeight: 1.6 }}>
+                <div style={{ fontSize: 11, color: '#6E6E8A', lineHeight: 1.55 }}>
                   {a.reason}
                 </div>
               </div>
@@ -215,24 +232,24 @@ export default function CircadianDetailPage() {
           <Section title="⚠ 주의할 것">
             {data.warnings.map((w, i) => (
               <div key={i} style={{
-                display: 'flex', gap: 12, alignItems: 'flex-start',
-                paddingBottom: i < data.warnings.length - 1 ? 14 : 0,
+                display: 'flex', gap: 10, alignItems: 'flex-start',
+                paddingBottom: i < data.warnings.length - 1 ? 10 : 0,
                 borderBottom: i < data.warnings.length - 1 ? '1px solid #FFE8E8' : 'none',
-                marginBottom: i < data.warnings.length - 1 ? 14 : 0,
+                marginBottom: i < data.warnings.length - 1 ? 10 : 0,
               }}>
                 <div style={{
-                  width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+                  width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
                   background: '#FF7675',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: 'white', fontSize: 14,
+                  color: 'white', fontSize: 12, marginTop: 1,
                 }}>
                   ✕
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: '#C0392B', marginBottom: 4 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#C0392B', marginBottom: 2 }}>
                     {w.label}
                   </div>
-                  <div style={{ fontSize: 12, color: '#E07070', lineHeight: 1.6 }}>
+                  <div style={{ fontSize: 11, color: '#E07070', lineHeight: 1.55 }}>
                     {w.reason}
                   </div>
                 </div>
@@ -247,32 +264,37 @@ export default function CircadianDetailPage() {
             {data.science.map((s, i) => {
               const meta = STRENGTH_META[s.strength] ?? STRENGTH_META.moderate
               return (
-                <IonAccordion key={i} value={String(i)} style={{ '--border-radius': '12px' } as React.CSSProperties}>
+                <IonAccordion
+                  key={`${selectedHour}-${i}`}
+                  value={String(i)}
+                  style={{ '--background': 'transparent' } as React.CSSProperties}
+                >
                   <IonItem slot="header" lines="none" style={{
                     '--background': 'transparent',
                     '--padding-start': '0',
-                    '--inner-padding-end': '0',
+                    '--inner-padding-end': '4px',
+                    '--min-height': '44px',
                   } as React.CSSProperties}>
                     <div style={{
                       display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
-                      gap: 8, width: '100%', padding: '4px 0',
+                      gap: 8, width: '100%', padding: '6px 0',
                     }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: '#1E1E2E', flex: 1, lineHeight: 1.5 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: '#1E1E2E', flex: 1, lineHeight: 1.5 }}>
                         {s.claim}
                       </div>
                       <span style={{
-                        fontSize: 10, fontWeight: 700, flexShrink: 0,
+                        fontSize: 9, fontWeight: 700, flexShrink: 0,
                         background: meta.bg, color: meta.color,
-                        padding: '3px 8px', borderRadius: 20,
-                        alignSelf: 'flex-start', marginTop: 2,
+                        padding: '2px 7px', borderRadius: 20,
+                        alignSelf: 'flex-start', marginTop: 3,
                       }}>
                         {meta.label}
                       </span>
                     </div>
                   </IonItem>
                   <div slot="content" style={{
-                    fontSize: 12, color: '#6E6E8A', lineHeight: 1.7,
-                    padding: '8px 0 12px',
+                    fontSize: 11, color: '#6E6E8A', lineHeight: 1.65,
+                    padding: '8px 4px 10px',
                     borderTop: '1px solid #F0EFF8',
                   }}>
                     {s.evidence}
@@ -292,14 +314,17 @@ export default function CircadianDetailPage() {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div style={{ marginBottom: 12 }}>
-      <div style={{ fontSize: 12, fontWeight: 700, color: '#A0A0B8', letterSpacing: 0.5, marginBottom: 8, paddingLeft: 4 }}>
+    <div style={{ marginBottom: 8 }}>
+      <div style={{
+        fontSize: 11, fontWeight: 700, color: '#A0A0B8',
+        letterSpacing: 0.4, marginBottom: 6, paddingLeft: 2,
+      }}>
         {title}
       </div>
       <div style={{
-        background: 'white', borderRadius: 16,
-        padding: '16px 18px',
-        boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
+        background: 'white', borderRadius: 14,
+        padding: '12px 14px',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
       }}>
         {children}
       </div>

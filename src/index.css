@@ -642,6 +642,8 @@ body {
 /* Scrollbar hide */
 .page-content::-webkit-scrollbar { display: none; }
 .page-content { scrollbar-width: none; }
+.hide-scrollbar::-webkit-scrollbar { display: none; }
+.hide-scrollbar { scrollbar-width: none; }
 
 /* Animation */
 @keyframes fadeUp {
