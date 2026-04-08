@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { getRecords, calculatePracticeRate, saveRoutineAction, clearRoutineAction, DAY_NAMES, getTodayKey, getLastWeekDates } from '../utils/storage'
 import { ALARM_PERIODS, PERIOD_ORDER, TEST_HOURLY_BEHAVIORS } from '../utils/alarmContent'
 
 export default function Records() {
+  const navigate = useNavigate()
   const today = new Date()
   const [viewYear, setViewYear] = useState(today.getFullYear())
   const [viewMonth, setViewMonth] = useState(today.getMonth())
@@ -62,6 +64,29 @@ export default function Records() {
       <div className="page-header">
         <div className="header-title">기록</div>
         <div className="header-sub">날짜별 실천 기록을 확인하세요</div>
+      </div>
+
+      {/* Health Records shortcut */}
+      <div className="section">
+        <button
+          onClick={() => navigate('/health-records')}
+          style={{
+            width: '100%', padding: '14px 18px', borderRadius: 16,
+            background: 'linear-gradient(135deg, #6C5CE7 0%, #a29bfe 100%)',
+            border: 'none', cursor: 'pointer', color: 'white',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            boxShadow: '0 4px 16px rgba(108,92,231,0.25)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 22 }}>🏥</span>
+            <div style={{ textAlign: 'left' }}>
+              <div style={{ fontSize: 14, fontWeight: 700 }}>건강 기록 조회</div>
+              <div style={{ fontSize: 12, opacity: 0.8, marginTop: 1 }}>수면 · 식사 · 운동 이력</div>
+            </div>
+          </div>
+          <span style={{ fontSize: 18, opacity: 0.8 }}>›</span>
+        </button>
       </div>
 
       {/* Weekly summary */}

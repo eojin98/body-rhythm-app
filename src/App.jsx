@@ -10,6 +10,7 @@ import Records from './pages/Records'
 import Dashboard from './pages/Dashboard'
 import Settings from './pages/Settings'
 import CircadianDetailPage from './pages/CircadianDetailPage'
+import HealthRecords from './pages/HealthRecords'
 import BottomNav from './components/BottomNav'
 
 function AppContent() {
@@ -57,6 +58,7 @@ function AppContent() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/circadian-detail" element={<CircadianDetailPage />} />
+          <Route path="/health-records" element={<HealthRecords />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>

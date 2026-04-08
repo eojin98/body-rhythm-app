@@ -18,6 +18,20 @@ function initMeals(saved) {
   }
 }
 
+const MEAL_DEFAULTS = {
+  breakfast: '08:00',
+  lunch: '12:30',
+  dinner: '18:30',
+  latenight: '21:30',
+}
+
+const MEAL_ITEMS = [
+  { key: 'breakfast', label: '아침', icon: '🍳' },
+  { key: 'lunch',     label: '점심', icon: '🥗' },
+  { key: 'dinner',    label: '저녁', icon: '🍚' },
+  { key: 'latenight', label: '야식', icon: '🌙' },
+]
+
 export default function MorningCheckin() {
   const navigate = useNavigate()
   const today = getTodayKey()
@@ -49,11 +63,25 @@ export default function MorningCheckin() {
     return Math.round(diff / 60 * 10) / 10
   }
 
+  const calcSleepDate = () => {
+    const [sh] = sleepTime.split(':').map(Number)
+    // If sleep hour >= 12 (PM/evening), sleep was the previous calendar day
+    if (sh >= 12) {
+      const [y, mo, d] = today.split('-').map(Number)
+      const prev = new Date(y, mo - 1, d)
+      prev.setDate(prev.getDate() - 1)
+      return `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}-${String(prev.getDate()).padStart(2, '0')}`
+    }
+    return today
+  }
+
   const handleSubmit = () => {
     saveRecord(today, {
       date: today,
       wakeTime,
+      wakeDate: today,
       sleepTime,
+      sleepDate: calcSleepDate(),
       sleepQuality,
       sleepHours: calcSleepHours(),
       wakeOnTime: calcWakeOnTime(),
@@ -68,7 +96,14 @@ export default function MorningCheckin() {
   }
 
   const updateMeal = (key, patch) =>
-    setMeals(m => ({ ...m, [key]: { ...m[key], ...patch } }))
+    setMeals(m => {
+      const current = m[key]
+      // Initialize time with default when un-skipping an empty meal
+      if (patch.skipped === false && !current.time) {
+        patch = { ...patch, time: MEAL_DEFAULTS[key] }
+      }
+      return { ...m, [key]: { ...current, ...patch } }
+    })
 
   const progress = ((step + 1) / totalSteps) * 100
 
@@ -128,7 +163,7 @@ export default function MorningCheckin() {
         {step === 3 && (
           <StepExercise
             exercise={exercise}
-            onToggle={() => setExercise(e => !e)}
+            onSet={setExercise}
             exerciseStart={exerciseStart}
             onStartChange={setExerciseStart}
             exerciseDuration={exerciseDuration}
@@ -153,6 +188,95 @@ export default function MorningCheckin() {
   )
 }
 
+// ─── TimePicker ───────────────────────────────────────────────────────────────
+
+function TimePicker({ value, onChange, defaultValue = '12:00' }) {
+  const displayVal = value || defaultValue
+  const [h24, m] = displayVal.split(':').map(Number)
+  const isPM = h24 >= 12
+  const hour12 = h24 === 0 ? 12 : h24 > 12 ? h24 - 12 : h24
+
+  const commit = (newH24, newM) => {
+    onChange(`${String(newH24).padStart(2, '0')}:${String(newM).padStart(2, '0')}`)
+  }
+
+  const setAMPM = (toPM) => {
+    if (toPM === isPM) return
+    const newH = toPM
+      ? (hour12 === 12 ? 12 : hour12 + 12)
+      : (hour12 === 12 ? 0 : hour12)
+    commit(newH, m)
+  }
+
+  const handleHour = (val) => {
+    const n = parseInt(val, 10)
+    if (isNaN(n) || n < 1 || n > 12) return
+    const newH24 = isPM ? (n === 12 ? 12 : n + 12) : (n === 12 ? 0 : n)
+    commit(newH24, m)
+  }
+
+  const handleMinute = (val) => {
+    const n = parseInt(val, 10)
+    if (isNaN(n) || n < 0 || n > 59) return
+    commit(h24, n)
+  }
+
+  const numStyle = {
+    width: 60, height: 54, textAlign: 'center', fontSize: 24, fontWeight: 700,
+    border: '2px solid #E0DFFF', borderRadius: 12, outline: 'none',
+    background: '#F5F4FF', color: '#1E1E2E', fontFamily: 'inherit',
+    MozAppearance: 'textfield',
+  }
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+      {/* AM/PM segmented toggle */}
+      <div style={{
+        display: 'flex', borderRadius: 12, overflow: 'hidden',
+        border: '2px solid #6C5CE7', flexShrink: 0,
+      }}>
+        {[['오전', false], ['오후', true]].map(([lbl, pm]) => (
+          <button
+            key={lbl}
+            type="button"
+            onClick={() => setAMPM(pm)}
+            style={{
+              padding: '0 14px', height: 54, border: 'none', cursor: 'pointer',
+              fontWeight: 700, fontSize: 14,
+              background: isPM === pm ? '#6C5CE7' : 'white',
+              color: isPM === pm ? 'white' : '#6C5CE7',
+              transition: 'background 0.15s, color 0.15s',
+              userSelect: 'none',
+            }}
+          >
+            {lbl}
+          </button>
+        ))}
+      </div>
+      {/* HH : MM */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <input
+          type="number"
+          min={1}
+          max={12}
+          value={hour12}
+          onChange={e => handleHour(e.target.value)}
+          style={numStyle}
+        />
+        <span style={{ fontSize: 26, fontWeight: 800, color: '#6C5CE7', lineHeight: 1, userSelect: 'none' }}>:</span>
+        <input
+          type="number"
+          min={0}
+          max={59}
+          value={m}
+          onChange={e => handleMinute(e.target.value)}
+          style={numStyle}
+        />
+      </div>
+    </div>
+  )
+}
+
 // ─── Step 1: 수면 ─────────────────────────────────────────────────────────────
 
 function StepSleep({ wakeTime, sleepTime, onWakeChange, onSleepChange, sleepHours, onTime }) {
@@ -162,15 +286,15 @@ function StepSleep({ wakeTime, sleepTime, onWakeChange, onSleepChange, sleepHour
         <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>수면 기록</h2>
         <p style={{ fontSize: 14, color: '#6E6E8A' }}>어젯밤 수면 시간을 입력해주세요</p>
       </div>
-      <div className="card card-body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <div className="input-group">
-          <label className="input-label">취침 시간 (어제)</label>
-          <input type="time" value={sleepTime} onChange={e => onSleepChange(e.target.value)} className="input input-time" />
+      <div className="card card-body" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <div>
+          <div className="input-label" style={{ marginBottom: 10 }}>취침 시간 (어제 밤)</div>
+          <TimePicker value={sleepTime} onChange={onSleepChange} defaultValue="23:00" />
         </div>
         <div style={{ height: 1, background: '#EEE' }} />
-        <div className="input-group">
-          <label className="input-label">기상 시간 (오늘)</label>
-          <input type="time" value={wakeTime} onChange={e => onWakeChange(e.target.value)} className="input input-time" />
+        <div>
+          <div className="input-label" style={{ marginBottom: 10 }}>기상 시간 (오늘 아침)</div>
+          <TimePicker value={wakeTime} onChange={onWakeChange} defaultValue="07:00" />
         </div>
       </div>
       <div style={{ display: 'flex', gap: 12 }}>
@@ -220,13 +344,6 @@ function StepQuality({ value, onChange }) {
 
 // ─── Step 3: 식사 ─────────────────────────────────────────────────────────────
 
-const MEAL_ITEMS = [
-  { key: 'breakfast', label: '아침', icon: '🍳' },
-  { key: 'lunch',     label: '점심', icon: '🥗' },
-  { key: 'dinner',    label: '저녁', icon: '🍚' },
-  { key: 'latenight', label: '야식', icon: '🌙' },
-]
-
 function StepMeals({ meals, onUpdate }) {
   const eatenCount = MEAL_ITEMS.filter(({ key }) => !meals[key].skipped).length
 
@@ -234,7 +351,7 @@ function StepMeals({ meals, onUpdate }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div>
         <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>식사 기록</h2>
-        <p style={{ fontSize: 14, color: '#6E6E8A' }}>각 식사의 시작 시간을 입력해주세요</p>
+        <p style={{ fontSize: 14, color: '#6E6E8A' }}>각 식사의 시작 시간을 기록해주세요</p>
       </div>
       <div className="card">
         {MEAL_ITEMS.map(({ key, label, icon }, i) => {
@@ -243,36 +360,36 @@ function StepMeals({ meals, onUpdate }) {
             <div
               key={key}
               style={{
-                padding: '14px 20px',
+                padding: '16px 20px',
                 borderBottom: i < MEAL_ITEMS.length - 1 ? '1px solid #F0EFF8' : 'none',
               }}
             >
-              {/* Row: icon + label + 안 먹었어요 checkbox */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: meal.skipped ? 0 : 10 }}>
+              {/* Row: icon + label + 먹었어요/안 먹었어요 toggle */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: meal.skipped ? 0 : 14 }}>
                 <span style={{ fontSize: 24 }}>{icon}</span>
-                <span style={{ fontWeight: 600, fontSize: 15, flex: 1 }}>{label}</span>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, color: '#A0A0B8', userSelect: 'none' }}>
-                  <input
-                    type="checkbox"
-                    checked={meal.skipped}
-                    onChange={() => onUpdate(key, { skipped: !meal.skipped })}
-                    style={{ accentColor: '#6C5CE7', width: 16, height: 16 }}
-                  />
-                  안 먹었어요
-                </label>
+                <span style={{ fontWeight: 700, fontSize: 16, flex: 1 }}>{label}</span>
+                <button
+                  type="button"
+                  onClick={() => onUpdate(key, { skipped: !meal.skipped })}
+                  style={{
+                    padding: '6px 14px', borderRadius: 20, border: 'none', cursor: 'pointer',
+                    fontWeight: 600, fontSize: 13,
+                    background: meal.skipped ? 'rgba(255,118,117,0.1)' : 'rgba(108,92,231,0.1)',
+                    color: meal.skipped ? '#FF7675' : '#6C5CE7',
+                    transition: 'all 0.15s',
+                    userSelect: 'none',
+                  }}
+                >
+                  {meal.skipped ? '안 먹었어요' : '먹었어요'}
+                </button>
               </div>
-              {/* Time input — only when not skipped */}
+              {/* TimePicker — only when not skipped */}
               {!meal.skipped && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontSize: 12, color: '#6E6E8A', whiteSpace: 'nowrap' }}>먹기 시작한 시간</span>
-                  <input
-                    type="time"
-                    value={meal.time}
-                    onChange={e => onUpdate(key, { time: e.target.value })}
-                    className="input input-time"
-                    style={{ flex: 1 }}
-                  />
-                </div>
+                <TimePicker
+                  value={meal.time}
+                  onChange={v => onUpdate(key, { time: v })}
+                  defaultValue={MEAL_DEFAULTS[key]}
+                />
               )}
             </div>
           )
@@ -287,7 +404,7 @@ function StepMeals({ meals, onUpdate }) {
 
 // ─── Step 4: 운동 ─────────────────────────────────────────────────────────────
 
-function StepExercise({ exercise, onToggle, exerciseStart, onStartChange, exerciseDuration, onDurationChange }) {
+function StepExercise({ exercise, onSet, exerciseStart, onStartChange, exerciseDuration, onDurationChange }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div>
@@ -295,32 +412,47 @@ function StepExercise({ exercise, onToggle, exerciseStart, onStartChange, exerci
         <p style={{ fontSize: 14, color: '#6E6E8A' }}>오늘 운동을 하셨나요?</p>
       </div>
 
-      {/* 안 했어요 checkbox */}
-      <div className="card card-body">
-        <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', userSelect: 'none' }}>
-          <input
-            type="checkbox"
-            checked={!exercise}
-            onChange={onToggle}
-            style={{ accentColor: '#6C5CE7', width: 18, height: 18 }}
-          />
-          <span style={{ fontSize: 15, fontWeight: 600, color: !exercise ? '#6C5CE7' : '#333' }}>
-            안 했어요
-          </span>
-        </label>
+      {/* 했어요 / 안 했어요 toggle */}
+      <div style={{ display: 'flex', gap: 12 }}>
+        <button
+          type="button"
+          onClick={() => onSet(true)}
+          style={{
+            flex: 1, padding: '20px 12px', borderRadius: 16,
+            border: '2px solid transparent',
+            cursor: 'pointer', fontWeight: 700, fontSize: 15,
+            background: exercise ? '#6C5CE7' : '#F5F4FF',
+            color: exercise ? 'white' : '#A0A0B8',
+            boxShadow: exercise ? '0 4px 16px rgba(108,92,231,0.3)' : 'none',
+            transition: 'all 0.2s', userSelect: 'none',
+          }}
+        >
+          <div style={{ fontSize: 32, marginBottom: 6 }}>💪</div>
+          했어요
+        </button>
+        <button
+          type="button"
+          onClick={() => onSet(false)}
+          style={{
+            flex: 1, padding: '20px 12px', borderRadius: 16,
+            border: !exercise ? '2px solid rgba(255,118,117,0.4)' : '2px solid transparent',
+            cursor: 'pointer', fontWeight: 700, fontSize: 15,
+            background: !exercise ? 'rgba(255,118,117,0.08)' : '#F5F4FF',
+            color: !exercise ? '#FF7675' : '#A0A0B8',
+            transition: 'all 0.2s', userSelect: 'none',
+          }}
+        >
+          <div style={{ fontSize: 32, marginBottom: 6 }}>🛋️</div>
+          안 했어요
+        </button>
       </div>
 
       {/* 운동 상세 — only when exercised */}
       {exercise && (
-        <div className="card card-body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div className="input-group">
-            <label className="input-label">운동 시작 시간</label>
-            <input
-              type="time"
-              value={exerciseStart}
-              onChange={e => onStartChange(e.target.value)}
-              className="input input-time"
-            />
+        <div className="card card-body" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div>
+            <div className="input-label" style={{ marginBottom: 10 }}>운동 시작 시간</div>
+            <TimePicker value={exerciseStart} onChange={onStartChange} defaultValue="17:00" />
           </div>
           <div style={{ height: 1, background: '#EEE' }} />
           <div className="input-group">
@@ -337,9 +469,8 @@ function StepExercise({ exercise, onToggle, exerciseStart, onStartChange, exerci
       )}
 
       {!exercise && (
-        <div style={{ textAlign: 'center', paddingTop: 12 }}>
-          <div style={{ fontSize: 48 }}>🛋️</div>
-          <div style={{ fontSize: 14, color: '#A0A0B8', marginTop: 8 }}>괜찮아요, 내일 운동해요!</div>
+        <div style={{ textAlign: 'center', paddingTop: 8 }}>
+          <div style={{ fontSize: 14, color: '#A0A0B8' }}>괜찮아요, 내일 운동해요!</div>
         </div>
       )}
     </div>
