@@ -1,6 +1,32 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getRecords, DAY_NAMES } from '../utils/storage'
+import { getRecords, DAY_NAMES, getLastWeekDates } from '../utils/storage'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+
+function getExerciseMins(rec) {
+  if (!rec?.exercise) return 0
+  if (typeof rec.exerciseDurationMins === 'number') return rec.exerciseDurationMins
+  if (typeof rec.exerciseDuration === 'string') {
+    let total = 0
+    const hourMatch = rec.exerciseDuration.match(/(\d+)\s*시간/)
+    const minMatch = rec.exerciseDuration.match(/(\d+)\s*분/)
+    if (hourMatch) total += parseInt(hourMatch[1], 10) * 60
+    if (minMatch) total += parseInt(minMatch[1], 10)
+    if (total > 0) return total
+  }
+  return 0
+}
+
+function formatExerciseDuration(rec) {
+  if (typeof rec.exerciseDurationMins === 'number' && rec.exerciseDurationMins > 0) {
+    const h = Math.floor(rec.exerciseDurationMins / 60)
+    const m = rec.exerciseDurationMins % 60
+    if (h === 0) return `${m}분`
+    if (m === 0) return `${h}시간`
+    return `${h}시간 ${m}분`
+  }
+  return rec.exerciseDuration || ''
+}
 
 const FILTERS = [
   { label: '최근 7일', days: 7 },
@@ -128,6 +154,9 @@ export default function HealthRecords() {
           </div>
         </div>
       </div>
+
+      {/* Exercise chart */}
+      <ExerciseChart records={records} />
 
       {/* Filter tabs */}
       <div className="section">
@@ -268,13 +297,52 @@ function HealthCard({ date, record }) {
           <div style={{ fontSize: 12, fontWeight: 600, color: '#A0A0B8' }}>운동</div>
           {record.exercise ? (
             <div style={{ fontSize: 13, fontWeight: 600, color: '#00B894' }}>
-              {record.exerciseDuration || '완료'}
-              {record.exerciseStart ? ` · ${fmt12(record.exerciseStart)} 시작` : ''}
+              {formatExerciseDuration(record) || '완료'}
             </div>
           ) : (
             <div style={{ fontSize: 13, color: '#A0A0B8' }}>휴식</div>
           )}
         </div>
+      </div>
+    </div>
+  )
+}
+
+function ExerciseChart({ records }) {
+  const weekDates = getLastWeekDates()
+
+  const data = weekDates.map(({ key, date }) => ({
+    label: `${date.getMonth() + 1}/${date.getDate()}`,
+    mins: getExerciseMins(records[key]),
+  }))
+
+  const totalMins = data.reduce((s, d) => s + d.mins, 0)
+  const totalH = Math.floor(totalMins / 60)
+  const totalM = totalMins % 60
+  const totalText = totalH > 0
+    ? (totalM > 0 ? `${totalH}시간 ${totalM}분` : `${totalH}시간`)
+    : `${totalM}분`
+
+  return (
+    <div className="section">
+      <div className="section-title">이번 주 운동 시간</div>
+      <div className="card card-body">
+        <div style={{ fontSize: 13, color: '#A0A0B8', marginBottom: 12 }}>
+          이번 주 총{' '}
+          <span style={{ color: '#6C5CE7', fontWeight: 700 }}>{totalText}</span>
+        </div>
+        <ResponsiveContainer width="100%" height={160}>
+          <BarChart data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F0EFF8" />
+            <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#A0A0B8' }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fontSize: 11, fill: '#A0A0B8' }} axisLine={false} tickLine={false} unit="분" />
+            <Tooltip
+              formatter={(v) => [`${v}분`, '운동']}
+              contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #E0DFFF' }}
+            />
+            <Bar dataKey="mins" fill="#6C5CE7" radius={[4, 4, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
       </div>
     </div>
   )

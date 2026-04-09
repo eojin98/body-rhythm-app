@@ -385,8 +385,15 @@ function RecordDetail({ record, dateKey, onUpdate }) {
               <span style={{ fontSize: 20 }}>💪</span>
               <span style={{ fontSize: 13, color: '#00B894', fontWeight: 600 }}>
                 운동 완료
-                {record.exerciseDuration ? ` · ${record.exerciseDuration}` : ''}
-                {record.exerciseStart ? ` (${fmt(record.exerciseStart)} 시작)` : ''}
+                {(() => {
+                  if (typeof record.exerciseDurationMins === 'number' && record.exerciseDurationMins > 0) {
+                    const h = Math.floor(record.exerciseDurationMins / 60)
+                    const m = record.exerciseDurationMins % 60
+                    const dur = h > 0 ? (m > 0 ? `${h}시간 ${m}분` : `${h}시간`) : `${m}분`
+                    return ` · ${dur}`
+                  }
+                  return record.exerciseDuration ? ` · ${record.exerciseDuration}` : ''
+                })()}
               </span>
             </div>
           )}
