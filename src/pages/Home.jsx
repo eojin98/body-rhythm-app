@@ -535,11 +535,27 @@ function ActiveRoutineCard({ alarm, onAction, behaviors }) {
   const period = ALARM_PERIODS[alarm.type]
   if (!period) return null
 
+  const [checked, setChecked] = useState(() => new Set())
+
   const isDark = period.darkText
   const headerTxt = isDark ? '#1E1E2E' : 'white'
   const headerSub = isDark ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.85)'
   const badgeBg = isDark ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.2)'
   const effectiveBehaviors = behaviors ?? period.behaviors
+
+  const handleCheck = (id) => {
+    const next = new Set(checked)
+    if (next.has(id)) {
+      next.delete(id)
+      setChecked(next)
+    } else {
+      next.add(id)
+      setChecked(next)
+      if (next.size === effectiveBehaviors.length) {
+        setTimeout(() => onAction(alarm.type, 'done'), 350)
+      }
+    }
+  }
 
   return (
     <div className="card" style={{ overflow: 'hidden' }}>
@@ -559,27 +575,44 @@ function ActiveRoutineCard({ alarm, onAction, behaviors }) {
         </div>
       </div>
 
-      {/* Behavior list */}
+      {/* Behavior list with individual check buttons */}
       <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {effectiveBehaviors.map((b, i) => (
-          <div key={b.id} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-            <div style={{
-              width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
-              background: period.gradient, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'white', fontSize: 12, fontWeight: 700,
-            }}>
-              {i + 1}
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 2 }}>{b.title}</div>
-              <div style={{ fontSize: 12, color: '#6E6E8A', lineHeight: 1.5 }}>{b.desc}</div>
-              <div style={{ fontSize: 11, color: '#A0A0B8', marginTop: 4, padding: '4px 8px', background: '#F5F4FF', borderRadius: 8, display: 'inline-block' }}>
-                💡 {b.tip}
+        {effectiveBehaviors.map((b, i) => {
+          const isChecked = checked.has(b.id)
+          return (
+            <div key={b.id} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+              <button
+                onClick={() => handleCheck(b.id)}
+                style={{
+                  width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+                  background: isChecked ? '#00B894' : period.gradient,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: 'white', fontSize: 12, fontWeight: 700,
+                  border: 'none', cursor: 'pointer', transition: 'background 0.2s',
+                }}
+              >
+                {isChecked ? '✓' : i + 1}
+              </button>
+              <div style={{ flex: 1, opacity: isChecked ? 0.45 : 1, transition: 'opacity 0.2s' }}>
+                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 2, textDecoration: isChecked ? 'line-through' : 'none' }}>{b.title}</div>
+                <div style={{ fontSize: 12, color: '#6E6E8A', lineHeight: 1.5 }}>{b.desc}</div>
+                <div style={{ fontSize: 11, color: '#A0A0B8', marginTop: 4, padding: '4px 8px', background: '#F5F4FF', borderRadius: 8, display: 'inline-block' }}>
+                  💡 {b.tip}
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
+
+      {/* Progress hint when partially checked */}
+      {checked.size > 0 && checked.size < effectiveBehaviors.length && (
+        <div style={{ padding: '0 20px 8px' }}>
+          <div style={{ fontSize: 12, color: '#6C5CE7', fontWeight: 600 }}>
+            {checked.size}/{effectiveBehaviors.length} 완료 — 모두 체크하면 자동 완료돼요!
+          </div>
+        </div>
+      )}
 
       {/* Action buttons */}
       <div style={{ padding: '0 20px 16px', display: 'flex', gap: 8 }}>
@@ -609,9 +642,11 @@ function ActiveRoutineCard({ alarm, onAction, behaviors }) {
   )
 }
 
-// ─── Test Alarm Card (베타 테스트 전용) ────────────────────────────────────────
+// ─── Test Alarm Card (매 시간별 알람) ─────────────────────────────────────────
 
 function TestAlarmCard({ hourKey, behavior, onAction }) {
+  const [isChecked, setIsChecked] = useState(false)
+
   const h = parseInt(hourKey, 10)
   const dh = h === 0 ? 12 : h > 12 ? h - 12 : h
   const period = h < 12 ? '오전' : '오후'
@@ -631,6 +666,12 @@ function TestAlarmCard({ hourKey, behavior, onAction }) {
   const txtSub = isDark ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.85)'
   const badgeBg = isDark ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.2)'
 
+  const handleCheck = () => {
+    if (isChecked) return
+    setIsChecked(true)
+    setTimeout(() => onAction(routineKey, 'done'), 350)
+  }
+
   return (
     <div className="card" style={{ overflow: 'hidden' }}>
       <div style={{ background: gradient, padding: '14px 20px' }}>
@@ -638,7 +679,7 @@ function TestAlarmCard({ hourKey, behavior, onAction }) {
           <span style={{ fontSize: 26 }}>⏰</span>
           <div>
             <div style={{ fontSize: 16, fontWeight: 700, color: txt }}>시간별 루틴</div>
-            <div style={{ fontSize: 12, color: txtSub }}>{timeStr} 알람 · 테스트 모드</div>
+            <div style={{ fontSize: 12, color: txtSub }}>{timeStr} 알람 · 매 시간별 알람</div>
           </div>
           <div style={{ marginLeft: 'auto', fontSize: 11, color: txt, background: badgeBg, padding: '4px 10px', borderRadius: 20 }}>
             지금 실천해요!
@@ -647,13 +688,30 @@ function TestAlarmCard({ hourKey, behavior, onAction }) {
       </div>
 
       <div style={{ padding: '16px 20px' }}>
-        <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>{behavior.title}</div>
-        <div style={{ fontSize: 13, color: '#6E6E8A', lineHeight: 1.5 }}>{behavior.desc}</div>
-        {behavior.tip && (
-          <div style={{ fontSize: 11, color: '#A0A0B8', marginTop: 8, padding: '5px 10px', background: '#F5F4FF', borderRadius: 8, display: 'inline-block' }}>
-            💡 {behavior.tip}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+          <button
+            onClick={handleCheck}
+            style={{
+              width: 28, height: 28, borderRadius: '50%', flexShrink: 0, marginTop: 2,
+              background: isChecked ? '#00B894' : gradient,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'white', fontSize: 14, fontWeight: 700,
+              border: 'none', cursor: isChecked ? 'default' : 'pointer',
+              transition: 'background 0.2s',
+            }}
+          >
+            {isChecked ? '✓' : '·'}
+          </button>
+          <div style={{ flex: 1, opacity: isChecked ? 0.45 : 1, transition: 'opacity 0.2s' }}>
+            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6, textDecoration: isChecked ? 'line-through' : 'none' }}>{behavior.title}</div>
+            <div style={{ fontSize: 13, color: '#6E6E8A', lineHeight: 1.5 }}>{behavior.desc}</div>
+            {behavior.tip && (
+              <div style={{ fontSize: 11, color: '#A0A0B8', marginTop: 8, padding: '5px 10px', background: '#F5F4FF', borderRadius: 8, display: 'inline-block' }}>
+                💡 {behavior.tip}
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
 
       <div style={{ padding: '0 20px 16px', display: 'flex', gap: 8 }}>
