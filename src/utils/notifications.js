@@ -145,6 +145,55 @@ function buildNotifContent(alarm) {
   }
 }
 
+// ─── Notification Action Types ────────────────────────────────────────────────
+// Register action type "HABIT_ACTION" with 3 buttons for Android notification drawer
+export async function registerNotificationActionTypes() {
+  if (!isNative()) return
+  try {
+    await LocalNotifications.registerActionTypes({
+      types: [
+        {
+          id: 'HABIT_ACTION',
+          actions: [
+            { id: 'done',  title: '✅ 완료' },
+            { id: 'later', title: '🔔 나중에' },
+            { id: 'skip',  title: '✖ 건너뜀' },
+          ],
+        },
+      ],
+    })
+  } catch (e) {
+    console.warn('registerActionTypes failed:', e)
+  }
+}
+
+// Set up listener for notification action button clicks.
+// Calls onAction(periodId, action, snoozeMins) when a button is tapped.
+// Must be called once on app init (before any notification fires).
+export function initNotificationActionListener(onAction) {
+  if (!isNative()) return () => {}
+  const handle = LocalNotifications.addListener(
+    'localNotificationActionPerformed',
+    (event) => {
+      const extra = event.notification?.extra || {}
+      const periodId = extra.periodId
+      if (!periodId) return
+
+      const actionId = event.actionId // 'done' | 'later' | 'skip' | 'tap'
+      if (actionId === 'done') {
+        onAction(periodId, 'done')
+      } else if (actionId === 'later') {
+        const snoozeMins = periodId.startsWith('test_') ? 10 : 30
+        onAction(periodId, 'snooze', snoozeMins)
+      } else if (actionId === 'skip') {
+        onAction(periodId, 'skipped')
+      }
+      // 'tap' (사용자가 알림 자체를 탭) — 앱을 열기만 하므로 별도 처리 없음
+    },
+  )
+  return () => handle.then(h => h.remove()).catch(() => {})
+}
+
 // Schedule repeating weekly notifications for one alarm (one per enabled day)
 export async function scheduleAlarmNotifications(alarm, soundMode) {
   if (!isNative()) return
@@ -160,6 +209,8 @@ export async function scheduleAlarmNotifications(alarm, soundMode) {
     title,
     body,
     channelId,
+    actionTypeId: 'HABIT_ACTION',
+    extra: { periodId: alarm.type, alarmId: alarm.id },
     schedule: {
       on: { weekday: dayIndex + 1, hour, minute },
       repeats: true,
@@ -186,6 +237,8 @@ export async function scheduleSnoozeNotification(alarm, snoozeMins = 30) {
       title,
       body,
       channelId,
+      actionTypeId: 'HABIT_ACTION',
+      extra: { periodId: alarm.type, alarmId: alarm.id },
       schedule: {
         at: new Date(Date.now() + snoozeMins * 60 * 1000),
         allowWhileIdle: true,
@@ -213,6 +266,8 @@ export async function scheduleTestSnoozeNotification(hk, behavior, snoozeMins = 
       title: `⏰ ${period} ${dh}:00 루틴`,
       body: behavior?.title ?? '루틴 알람',
       channelId,
+      actionTypeId: 'HABIT_ACTION',
+      extra: { periodId: `test_${hk}` },
       schedule: {
         at: new Date(Date.now() + snoozeMins * 60 * 1000),
         allowWhileIdle: true,
@@ -261,6 +316,8 @@ export async function scheduleTestHourlyNotifications() {
       title: `⏰ ${period} ${dh}:00 루틴`,
       body: behavior.title,
       channelId,
+      actionTypeId: 'HABIT_ACTION',
+      extra: { periodId: `test_${hk}` },
       schedule: {
         on: { hour: h, minute: 0 },
         repeats: true,

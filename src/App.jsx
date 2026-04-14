@@ -1,8 +1,17 @@
 import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { Capacitor } from '@capacitor/core'
-import { getSettings } from './utils/storage'
-import { checkAndFireAlarms, syncAllAlarmNotifications, initNotificationChannels } from './utils/notifications'
+import { getSettings, getTodayKey, saveRoutineAction, setSnooze } from './utils/storage'
+import {
+  checkAndFireAlarms,
+  syncAllAlarmNotifications,
+  initNotificationChannels,
+  registerNotificationActionTypes,
+  initNotificationActionListener,
+  scheduleSnoozeNotification,
+  scheduleTestSnoozeNotification,
+} from './utils/notifications'
+import { TEST_HOURLY_BEHAVIORS } from './utils/alarmContent'
 import Onboarding from './pages/Onboarding'
 import Home from './pages/Home'
 import MorningCheckin from './pages/MorningCheckin'
@@ -24,10 +33,32 @@ function AppContent() {
     if (!s.onboardingComplete) return
 
     if (Capacitor.isNativePlatform()) {
-      // Native: init channels then sync all alarms
-      initNotificationChannels().then(() => {
-        syncAllAlarmNotifications(s.alarms, s.testMode)
-      })
+      // Native: init channels + action types, then sync all alarms
+      initNotificationChannels()
+        .then(() => registerNotificationActionTypes())
+        .then(() => syncAllAlarmNotifications(s.alarms, s.testMode))
+
+      // Handle notification action buttons (완료 / 나중에 / 건너뜀)
+      const removeListener = initNotificationActionListener(
+        async (periodId, action, snoozeMins = 30) => {
+          const today = getTodayKey()
+          if (action === 'done' || action === 'skipped') {
+            saveRoutineAction(today, periodId, action)
+          } else if (action === 'snooze') {
+            setSnooze(periodId, Date.now() + snoozeMins * 60 * 1000)
+            if (periodId.startsWith('test_')) {
+              const hk = periodId.replace('test_', '')
+              const behavior = TEST_HOURLY_BEHAVIORS[hk]
+              await scheduleTestSnoozeNotification(hk, behavior, snoozeMins)
+            } else {
+              const settings = getSettings()
+              const alarm = settings.alarms.find(a => a.type === periodId)
+              if (alarm) await scheduleSnoozeNotification(alarm, snoozeMins)
+            }
+          }
+        },
+      )
+      return removeListener
     } else {
       // Web/PWA: poll every 10 seconds to fire alarms at the right minute
       const tick = () => {
