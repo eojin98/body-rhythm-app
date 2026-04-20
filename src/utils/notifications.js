@@ -8,7 +8,7 @@ const isNative = () => Capacitor.isNativePlatform()
 // Native plugin to check device ringer mode (Android only)
 const DeviceRinger = registerPlugin('DeviceRinger')
 
-// Returns true if device ringer mode is RINGER_MODE_SILENT (0)
+// Returns true when device ringer mode is SILENT(0) or VIBRATE(1) — i.e., not NORMAL(2)
 async function isDeviceSilent() {
   if (!isNative()) return false
   try {
@@ -17,6 +17,15 @@ async function isDeviceSilent() {
   } catch {
     return false
   }
+}
+
+// Listen for ringer mode changes from the native plugin.
+// callback() is invoked whenever the mode transitions (e.g. normal → vibrate).
+// Returns a cleanup function to remove the listener.
+export function addRingerModeListener(callback) {
+  if (!isNative()) return () => {}
+  const handle = DeviceRinger.addListener('ringerModeChanged', callback)
+  return () => handle.then(h => h.remove()).catch(() => {})
 }
 
 // Resolve the effective channel: always CHANNEL_SILENT when device is in silent mode

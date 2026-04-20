@@ -8,6 +8,7 @@ import {
   initNotificationChannels,
   registerNotificationActionTypes,
   initNotificationActionListener,
+  addRingerModeListener,
   scheduleSnoozeNotification,
   scheduleTestSnoozeNotification,
 } from './utils/notifications'
@@ -39,7 +40,7 @@ function AppContent() {
         .then(() => syncAllAlarmNotifications(s.alarms, s.testMode))
 
       // Handle notification action buttons (완료 / 나중에 / 건너뜀)
-      const removeListener = initNotificationActionListener(
+      const removeActionListener = initNotificationActionListener(
         async (periodId, action, snoozeMins = 30) => {
           const today = getTodayKey()
           if (action === 'done' || action === 'skipped') {
@@ -58,7 +59,28 @@ function AppContent() {
           }
         },
       )
-      return removeListener
+
+      // Ringer mode 변경 시 알람 재스케줄 (NORMAL ↔ SILENT/VIBRATE 전환 즉시 반영)
+      const removeRingerListener = addRingerModeListener(() => {
+        const settings = getSettings()
+        syncAllAlarmNotifications(settings.alarms, settings.testMode)
+      })
+
+      // 앱이 백그라운드에서 포그라운드로 복귀할 때 재스케줄
+      // (백그라운드 중에 ringer mode 가 바뀐 경우 대비)
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === 'visible') {
+          const settings = getSettings()
+          syncAllAlarmNotifications(settings.alarms, settings.testMode)
+        }
+      }
+      document.addEventListener('visibilitychange', handleVisibilityChange)
+
+      return () => {
+        removeActionListener()
+        removeRingerListener()
+        document.removeEventListener('visibilitychange', handleVisibilityChange)
+      }
     } else {
       // Web/PWA: poll every 10 seconds to fire alarms at the right minute
       const tick = () => {
