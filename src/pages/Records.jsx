@@ -258,6 +258,7 @@ export default function Records() {
 // ─── Day View ─────────────────────────────────────────────────────────────────
 
 function DayView({ date, records, todayKey, onUpdate }) {
+  const navigate = useNavigate()
   const key = dateToKey(date)
   const record = records[key] || null
   const isToday = key === todayKey
@@ -271,11 +272,40 @@ function DayView({ date, records, todayKey, onUpdate }) {
             {isToday ? '오늘 아직 루틴 기록이 없습니다' : '이 날의 기록이 없습니다'}
           </div>
         </div>
+        {isToday && (
+          <div style={{ padding: '0 16px' }}>
+            <button
+              onClick={() => navigate('/checkin')}
+              className="btn btn-primary btn-full"
+            >
+              오늘 체크인 작성하기
+            </button>
+          </div>
+        )}
       </div>
     )
   }
 
-  return <RecordDetail record={record} dateKey={key} onUpdate={onUpdate} />
+  return (
+    <div>
+      {isToday && record.completed && (
+        <div className="section" style={{ paddingBottom: 4 }}>
+          <button
+            onClick={() => navigate('/checkin', { state: { editMode: true } })}
+            style={{
+              width: '100%', padding: '12px 18px', borderRadius: 14,
+              background: 'white', border: '1.5px solid #6C5CE7',
+              cursor: 'pointer', color: '#6C5CE7', fontWeight: 600, fontSize: 14,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            }}
+          >
+            ✏️ 오늘 체크인 수정
+          </button>
+        </div>
+      )}
+      <RecordDetail record={record} dateKey={key} onUpdate={onUpdate} />
+    </div>
+  )
 }
 
 // ─── Week View ────────────────────────────────────────────────────────────────

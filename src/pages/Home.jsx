@@ -6,7 +6,7 @@ import {
   calculateTodayPracticeRate, getNextAlarm, timeUntil,
   formatTime12, DAY_NAMES,
   saveRoutineAction, clearRoutineAction, getSnooze, setSnooze,
-  autoMarkMissedRoutines,
+  autoMarkMissedRoutines, getCheckinStatus,
 } from '../utils/storage'
 import {
   getPermissionStatus,
@@ -66,17 +66,20 @@ export default function Home() {
   const [notifStatus, setNotifStatus] = useState(getPermissionStatus)
   const [activeAlarm, setActiveAlarm] = useState(null)
   const [testAlarm, setTestAlarm] = useState(null)
+  const [checkinSkipped, setCheckinSkipped] = useState(() => {
+    const today = getTodayKey()
+    return getCheckinStatus(today) === 'skipped'
+  })
 
-  // Auto-navigate to morning checkin on first open of the day (if not done)
+  // Auto-navigate to morning checkin when not completed and not skipped today
   useEffect(() => {
-    const h = new Date().getHours()
-    if (h >= 5 && h < 11 && !getRecord(getTodayKey())?.completed) {
-      const key = `prompted_${getTodayKey()}`
-      if (!sessionStorage.getItem(key)) {
-        sessionStorage.setItem(key, '1')
-        navigate('/checkin')
-      }
-    }
+    const today = getTodayKey()
+    const status = getCheckinStatus(today)
+    if (status === 'completed' || status === 'skipped') return
+    const sessionKey = `checkin_prompted_${today}`
+    if (sessionStorage.getItem(sessionKey)) return
+    sessionStorage.setItem(sessionKey, '1')
+    navigate('/checkin')
   }, [])
 
   useEffect(() => {
@@ -84,8 +87,10 @@ export default function Home() {
     const tick = () => {
       const nowDate = new Date()
       setNow(nowDate)
-      const rec = getRecord(getTodayKey())
+      const todayKey2 = getTodayKey()
+      const rec = getRecord(todayKey2)
       setTodayRecord(rec)
+      setCheckinSkipped(getCheckinStatus(todayKey2) === 'skipped')
       const s = getSettings()
       setSettings(s)
       setActiveAlarm(getActiveRoutineAlarm(s.alarms, rec?.routines))
@@ -253,6 +258,31 @@ export default function Home() {
               ? '알림 권한이 없어 알람이 울리지 않습니다. 설정 탭에서 허용해주세요.'
               : '알림 권한이 없어 알람이 울리지 않을 수 있습니다. 브라우저 설정에서 알림을 허용해주세요.'}
           </span>
+        </div>
+      )}
+
+      {/* Checkin incomplete badge */}
+      {checkinSkipped && (
+        <div className="section" style={{ paddingBottom: 0 }}>
+          <button
+            onClick={() => navigate('/checkin')}
+            style={{
+              width: '100%', padding: '14px 18px', borderRadius: 16,
+              background: 'linear-gradient(135deg, #FDCB6E 0%, #E17055 100%)',
+              border: 'none', cursor: 'pointer', color: 'white',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              boxShadow: '0 4px 16px rgba(225,112,85,0.3)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 22 }}>📋</span>
+              <div style={{ textAlign: 'left' }}>
+                <div style={{ fontSize: 14, fontWeight: 700 }}>오늘 체크인 미완료</div>
+                <div style={{ fontSize: 12, opacity: 0.85, marginTop: 1 }}>탭하여 지금 작성하기</div>
+              </div>
+            </div>
+            <span style={{ fontSize: 18, opacity: 0.8 }}>›</span>
+          </button>
         </div>
       )}
 

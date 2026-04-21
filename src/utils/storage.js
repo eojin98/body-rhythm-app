@@ -246,6 +246,26 @@ export function formatTime12(time24) {
   return `${period} ${hour}:${String(m).padStart(2, '0')}`
 }
 
+// --- Checkin prompt status (completed / skipped / null per day) ---
+// Key format: `${deviceId}_checkin_${dateKey}` (e.g. checkin_2026-04-21)
+
+export function getCheckinStatus(dateKey) {
+  if (getRecord(dateKey)?.completed) return 'completed'
+  try {
+    const id = getDeviceId()
+    return localStorage.getItem(`${id}_checkin_${dateKey}`) || null
+  } catch {
+    return null
+  }
+}
+
+export function setCheckinSkipped(dateKey) {
+  try {
+    const id = getDeviceId()
+    localStorage.setItem(`${id}_checkin_${dateKey}`, 'skipped')
+  } catch {}
+}
+
 // --- Routine actions (완료/건너뛰기 per period per day) ---
 
 export function saveRoutineAction(dateKey, periodId, status) {

@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { getTodayKey, getRecord, saveRecord, getSettings, formatDate } from '../utils/storage'
+import { useNavigate, useLocation } from 'react-router-dom'
+import { getTodayKey, getRecord, saveRecord, getSettings, formatDate, setCheckinSkipped } from '../utils/storage'
 
 // Handle migration from old format (boolean) to new format ({ skipped, time })
 function initMeals(saved) {
@@ -34,6 +34,8 @@ const MEAL_ITEMS = [
 
 export default function MorningCheckin() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const editMode = location.state?.editMode === true
   const today = getTodayKey()
   const existing = getRecord(today) || {}
   const settings = getSettings()
@@ -107,6 +109,11 @@ export default function MorningCheckin() {
     navigate('/records')
   }
 
+  const handleSkipForNow = () => {
+    setCheckinSkipped(today)
+    navigate('/')
+  }
+
   const updateMeal = (key, patch) =>
     setMeals(m => {
       const current = m[key]
@@ -135,17 +142,25 @@ export default function MorningCheckin() {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
           <button
-            onClick={() => step === 0 ? navigate('/') : setStep(s => s - 1)}
+            onClick={() => step === 0 ? navigate(editMode ? '/records' : '/') : setStep(s => s - 1)}
             style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: 10, color: 'white', padding: '8px 12px', cursor: 'pointer', fontSize: 15 }}
           >
             ←
           </button>
           <div>
             <div style={{ fontSize: 11, opacity: 0.8 }}>{formatDate(today)}</div>
-            <div style={{ fontSize: 18, fontWeight: 700 }}>아침 체크인</div>
+            <div style={{ fontSize: 18, fontWeight: 700 }}>{editMode ? '체크인 수정' : '아침 체크인'}</div>
           </div>
-          <div style={{ marginLeft: 'auto', fontSize: 13, opacity: 0.8 }}>
-            {step + 1}/{totalSteps}
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+            {!editMode && (
+              <button
+                onClick={handleSkipForNow}
+                style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.75)', fontSize: 13, cursor: 'pointer', padding: '4px 0', fontWeight: 500 }}
+              >
+                나중에 작성
+              </button>
+            )}
+            <div style={{ fontSize: 13, opacity: 0.8 }}>{step + 1}/{totalSteps}</div>
           </div>
         </div>
         <div style={{ height: 4, background: 'rgba(255,255,255,0.3)', borderRadius: 2, overflow: 'hidden' }}>
@@ -192,7 +207,7 @@ export default function MorningCheckin() {
           </button>
         ) : (
           <button className="btn btn-primary btn-full" onClick={handleSubmit}>
-            체크인 완료 🎉
+            {editMode ? '수정 완료 ✓' : '체크인 완료 🎉'}
           </button>
         )}
       </div>

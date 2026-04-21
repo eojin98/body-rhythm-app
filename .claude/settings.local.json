@@ -6,7 +6,8 @@
       "Bash(npx cap:*)",
       "Bash(ngrok config:*)",
       "Bash(xargs grep:*)",
-      "Bash(grep -E \"\\\\.\\(java|kt|xml\\)$\")"
+      "Bash(grep -E \"\\\\.\\(java|kt|xml\\)$\")",
+      "Bash(npx vite *)"
     ]
   }
 }
