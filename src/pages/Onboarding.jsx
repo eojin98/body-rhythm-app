@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { getSettings, saveSettings } from '../utils/storage'
 import { requestNotificationPermission } from '../utils/notifications'
+import TimeInputField from '../components/TimeInputField'
 
 const STEPS = ['환영', '기상 시간', '취침 시간', '알림 설정', '완료']
 
@@ -112,16 +113,10 @@ function WakeTimeStep({ value, onChange, onNext, onBack }) {
         <p style={{ fontSize: 15, opacity: 0.85 }}>보통 몇 시에 일어나시나요?</p>
       </div>
       <div className="onboarding-body">
-        <div className="card" style={{ width: '100%', padding: '24px 20px', textAlign: 'center' }}>
-          <p style={{ fontSize: 13, color: '#6E6E8A', marginBottom: 12, fontWeight: 600 }}>기상 시간</p>
-          <input
-            type="time"
-            value={value}
-            onChange={e => onChange(e.target.value)}
-            className="input input-time"
-            style={{ width: '100%' }}
-          />
-          <p style={{ fontSize: 13, color: '#6E6E8A', marginTop: 10 }}>
+        <div className="card" style={{ width: '100%', padding: '24px 20px' }}>
+          <p style={{ fontSize: 13, color: '#6E6E8A', marginBottom: 14, fontWeight: 600 }}>기상 시간</p>
+          <TimeInputField value={value} onChange={onChange} defaultValue="07:00" />
+          <p style={{ fontSize: 13, color: '#6E6E8A', marginTop: 14 }}>
             이 시간에 기상 알람이 울립니다
           </p>
         </div>
@@ -144,16 +139,10 @@ function SleepTimeStep({ value, onChange, onNext, onBack }) {
         <p style={{ fontSize: 15, opacity: 0.85 }}>보통 몇 시에 주무시나요?</p>
       </div>
       <div className="onboarding-body">
-        <div className="card" style={{ width: '100%', padding: '24px 20px', textAlign: 'center' }}>
-          <p style={{ fontSize: 13, color: '#6E6E8A', marginBottom: 12, fontWeight: 600 }}>취침 시간</p>
-          <input
-            type="time"
-            value={value}
-            onChange={e => onChange(e.target.value)}
-            className="input input-time"
-            style={{ width: '100%' }}
-          />
-          <p style={{ fontSize: 13, color: '#6E6E8A', marginTop: 10 }}>
+        <div className="card" style={{ width: '100%', padding: '24px 20px' }}>
+          <p style={{ fontSize: 13, color: '#6E6E8A', marginBottom: 14, fontWeight: 600 }}>취침 시간</p>
+          <TimeInputField value={value} onChange={onChange} defaultValue="23:00" />
+          <p style={{ fontSize: 13, color: '#6E6E8A', marginTop: 14 }}>
             취침 30분 전에 알림을 보내드립니다
           </p>
         </div>
