@@ -24,12 +24,21 @@ function RecordsIcon({ active }) {
   )
 }
 
-function DashboardIcon({ active }) {
+function CharacterIcon({ active }) {
+  const c = active ? '#6C5CE7' : '#A0A0B8'
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-      <rect x="3" y="13" width="4" height="8" rx="1" fill={active ? '#6C5CE7' : '#A0A0B8'}/>
-      <rect x="10" y="9" width="4" height="12" rx="1" fill={active ? '#6C5CE7' : '#A0A0B8'}/>
-      <rect x="17" y="5" width="4" height="16" rx="1" fill={active ? '#6C5CE7' : '#A0A0B8'}/>
+      {/* ears */}
+      <path d="M6 9L4 4L9 8" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M18 9L20 4L15 8" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      {/* face */}
+      <circle cx="12" cy="14" r="7" stroke={c} strokeWidth="2"/>
+      {/* eyes */}
+      <circle cx="9.5" cy="13.5" r="1" fill={c}/>
+      <circle cx="14.5" cy="13.5" r="1" fill={c}/>
+      {/* nose + mouth */}
+      <path d="M12 15.5V16.5" stroke={c} strokeWidth="1.5" strokeLinecap="round"/>
+      <path d="M10.5 16.5C10.5 16.5 11 17.5 12 17.5C13 17.5 13.5 16.5 13.5 16.5" stroke={c} strokeWidth="1.5" strokeLinecap="round"/>
     </svg>
   )
 }
@@ -48,10 +57,10 @@ function SettingsIcon({ active }) {
 }
 
 const navItems = [
-  { path: '/', label: '홈', Icon: HomeIcon },
-  { path: '/records', label: '기록', Icon: RecordsIcon },
-  { path: '/dashboard', label: '통계', Icon: DashboardIcon },
-  { path: '/settings', label: '설정', Icon: SettingsIcon },
+  { path: '/',          label: '홈',    Icon: HomeIcon },
+  { path: '/records',   label: '기록',  Icon: RecordsIcon },
+  { path: '/character', label: '캐릭터', Icon: CharacterIcon },
+  { path: '/settings',  label: '설정',  Icon: SettingsIcon },
 ]
 
 export default function BottomNav() {

@@ -2,20 +2,19 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   getRecords, calculatePracticeRate, saveRoutineAction, clearRoutineAction,
-  DAY_NAMES, getTodayKey,
+  DAY_NAMES, getTodayKey, getLastWeekDates, getSettings,
 } from '../utils/storage'
-import { ALARM_PERIODS, PERIOD_ORDER, TEST_HOURLY_BEHAVIORS } from '../utils/alarmContent'
+import { ALARM_PERIODS, PERIOD_ORDER, TEST_HOURLY_BEHAVIORS, getEffectiveBehaviors } from '../utils/alarmContent'
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts'
 
-// ─── Date helpers ────────────────────────────────────────────────────────────
+// ─── Date helpers ─────────────────────────────────────────────────────────────
 
 function dateToKey(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
-// Monday-based week start
 function getWeekStart(date) {
   const d = new Date(date)
   const day = d.getDay()
@@ -87,6 +86,7 @@ function getRateColor(rate) {
 
 export default function Records() {
   const navigate = useNavigate()
+  const [segment, setSegment] = useState('explore')
   const [tab, setTab] = useState('day')
   const [viewDate, setViewDate] = useState(() => new Date())
   const [showPicker, setShowPicker] = useState(false)
@@ -144,22 +144,24 @@ export default function Records() {
       {/* Header */}
       <div className="page-header">
         <div className="header-title">기록</div>
-        <div className="header-sub">날짜별 실천 기록을 확인하세요</div>
+        <div className="header-sub">
+          {segment === 'explore' ? '날짜별 실천 기록을 확인하세요' : '지난 7일간의 루틴 실천 현황'}
+        </div>
       </div>
 
-      {/* Tabs */}
+      {/* ─── 탐색 / 통계 세그먼트 컨트롤 ─── */}
       <div className="section" style={{ paddingBottom: 0 }}>
         <div style={{ display: 'flex', background: '#F5F5FA', borderRadius: 12, padding: 4, gap: 2 }}>
-          {[['day', '일'], ['week', '주'], ['month', '월']].map(([key, label]) => (
+          {[['explore', '탐색'], ['stats', '통계']].map(([key, label]) => (
             <button
               key={key}
-              onClick={() => setTab(key)}
+              onClick={() => setSegment(key)}
               style={{
-                flex: 1, padding: '8px 0', borderRadius: 9, border: 'none', cursor: 'pointer',
-                fontWeight: tab === key ? 700 : 500, fontSize: 14,
-                background: tab === key ? 'white' : 'transparent',
-                color: tab === key ? '#6C5CE7' : '#A0A0B8',
-                boxShadow: tab === key ? '0 1px 4px rgba(0,0,0,0.10)' : 'none',
+                flex: 1, padding: '9px 0', borderRadius: 9, border: 'none', cursor: 'pointer',
+                fontWeight: segment === key ? 700 : 500, fontSize: 14,
+                background: segment === key ? 'white' : 'transparent',
+                color: segment === key ? '#6C5CE7' : '#A0A0B8',
+                boxShadow: segment === key ? '0 1px 4px rgba(0,0,0,0.10)' : 'none',
                 transition: 'all 0.18s',
               }}
             >
@@ -169,93 +171,394 @@ export default function Records() {
         </div>
       </div>
 
-      {/* Date navigator */}
-      <div className="section" style={{ paddingTop: 10, paddingBottom: 0 }}>
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          background: 'white', borderRadius: 14, padding: '8px 4px',
-          boxShadow: '0 1px 8px rgba(0,0,0,0.06)',
-        }}>
-          <button
-            onClick={() => shiftDate(-1)}
-            style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#6C5CE7', padding: '4px 12px', lineHeight: 1 }}
-          >
-            ‹
-          </button>
-          <button
-            onClick={() => setShowPicker(true)}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', flex: 1, padding: '2px 0' }}
-          >
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#1E1E2E', textAlign: 'center' }}>{navLabel}</div>
-            <div style={{ fontSize: 11, color: '#B0B0C8', marginTop: 2, textAlign: 'center' }}>탭하여 날짜 선택</div>
-          </button>
-          <button
-            onClick={() => shiftDate(1)}
-            disabled={isFuture}
-            style={{
-              background: 'none', border: 'none', fontSize: 24, cursor: isFuture ? 'default' : 'pointer',
-              color: isFuture ? '#DDD' : '#6C5CE7', padding: '4px 12px', lineHeight: 1,
-            }}
-          >
-            ›
-          </button>
-        </div>
-      </div>
-
-      {/* Tab content */}
-      {tab === 'day' && (
-        <DayView date={viewDate} records={records} todayKey={todayKey} onUpdate={refresh} />
-      )}
-      {tab === 'week' && (
-        <WeekView
-          date={viewDate} records={records} todayKey={todayKey}
-          onGoToDay={(d) => { setViewDate(d); setTab('day') }}
-        />
-      )}
-      {tab === 'month' && (
-        <MonthView
-          date={viewDate} records={records} todayKey={todayKey}
-          onGoToDay={(d) => { setViewDate(d); setTab('day') }}
-        />
-      )}
-
-      {/* Health Records shortcut */}
-      <div className="section">
-        <button
-          onClick={() => navigate('/health-records')}
-          style={{
-            width: '100%', padding: '14px 18px', borderRadius: 16,
-            background: 'linear-gradient(135deg, #6C5CE7 0%, #a29bfe 100%)',
-            border: 'none', cursor: 'pointer', color: 'white',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            boxShadow: '0 4px 16px rgba(108,92,231,0.25)',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 22 }}>🏥</span>
-            <div style={{ textAlign: 'left' }}>
-              <div style={{ fontSize: 14, fontWeight: 700 }}>건강 기록 조회</div>
-              <div style={{ fontSize: 12, opacity: 0.8, marginTop: 1 }}>수면 · 식사 · 운동 이력</div>
+      {/* ─── 탐색 뷰 ─── */}
+      {segment === 'explore' && (
+        <>
+          {/* 일/주/월 탭 */}
+          <div className="section" style={{ paddingBottom: 0 }}>
+            <div style={{ display: 'flex', background: '#F5F5FA', borderRadius: 12, padding: 4, gap: 2 }}>
+              {[['day', '일'], ['week', '주'], ['month', '월']].map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => setTab(key)}
+                  style={{
+                    flex: 1, padding: '8px 0', borderRadius: 9, border: 'none', cursor: 'pointer',
+                    fontWeight: tab === key ? 700 : 500, fontSize: 14,
+                    background: tab === key ? 'white' : 'transparent',
+                    color: tab === key ? '#6C5CE7' : '#A0A0B8',
+                    boxShadow: tab === key ? '0 1px 4px rgba(0,0,0,0.10)' : 'none',
+                    transition: 'all 0.18s',
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
           </div>
-          <span style={{ fontSize: 18, opacity: 0.8 }}>›</span>
-        </button>
-      </div>
 
-      {/* Date picker modal */}
-      {showPicker && (
-        <DatePickerModal
-          value={viewDate}
-          tab={tab}
-          onSelect={(d) => { setViewDate(d); setShowPicker(false) }}
-          onClose={() => setShowPicker(false)}
-        />
+          {/* 날짜 네비게이터 */}
+          <div className="section" style={{ paddingTop: 10, paddingBottom: 0 }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              background: 'white', borderRadius: 14, padding: '8px 4px',
+              boxShadow: '0 1px 8px rgba(0,0,0,0.06)',
+            }}>
+              <button
+                onClick={() => shiftDate(-1)}
+                style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#6C5CE7', padding: '4px 12px', lineHeight: 1 }}
+              >
+                ‹
+              </button>
+              <button
+                onClick={() => setShowPicker(true)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', flex: 1, padding: '2px 0' }}
+              >
+                <div style={{ fontSize: 15, fontWeight: 700, color: '#1E1E2E', textAlign: 'center' }}>{navLabel}</div>
+                <div style={{ fontSize: 11, color: '#B0B0C8', marginTop: 2, textAlign: 'center' }}>탭하여 날짜 선택</div>
+              </button>
+              <button
+                onClick={() => shiftDate(1)}
+                disabled={isFuture}
+                style={{
+                  background: 'none', border: 'none', fontSize: 24, cursor: isFuture ? 'default' : 'pointer',
+                  color: isFuture ? '#DDD' : '#6C5CE7', padding: '4px 12px', lineHeight: 1,
+                }}
+              >
+                ›
+              </button>
+            </div>
+          </div>
+
+          {/* 뷰 콘텐츠 */}
+          {tab === 'day' && (
+            <DayView date={viewDate} records={records} todayKey={todayKey} onUpdate={refresh} />
+          )}
+          {tab === 'week' && (
+            <WeekView
+              date={viewDate} records={records} todayKey={todayKey}
+              onGoToDay={(d) => { setViewDate(d); setTab('day') }}
+            />
+          )}
+          {tab === 'month' && (
+            <MonthView
+              date={viewDate} records={records} todayKey={todayKey}
+              onGoToDay={(d) => { setViewDate(d); setTab('day') }}
+            />
+          )}
+
+          {/* 건강 기록 바로가기 */}
+          <div className="section">
+            <button
+              onClick={() => navigate('/health-records')}
+              style={{
+                width: '100%', padding: '14px 18px', borderRadius: 16,
+                background: 'linear-gradient(135deg, #6C5CE7 0%, #a29bfe 100%)',
+                border: 'none', cursor: 'pointer', color: 'white',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                boxShadow: '0 4px 16px rgba(108,92,231,0.25)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 22 }}>🏥</span>
+                <div style={{ textAlign: 'left' }}>
+                  <div style={{ fontSize: 14, fontWeight: 700 }}>건강 기록 조회</div>
+                  <div style={{ fontSize: 12, opacity: 0.8, marginTop: 1 }}>수면 · 식사 · 운동 이력</div>
+                </div>
+              </div>
+              <span style={{ fontSize: 18, opacity: 0.8 }}>›</span>
+            </button>
+          </div>
+
+          {/* 날짜 선택 모달 */}
+          {showPicker && (
+            <DatePickerModal
+              value={viewDate}
+              tab={tab}
+              onSelect={(d) => { setViewDate(d); setShowPicker(false) }}
+              onClose={() => setShowPicker(false)}
+            />
+          )}
+        </>
+      )}
+
+      {/* ─── 통계 뷰 ─── */}
+      {segment === 'stats' && (
+        <StatsSegment records={records} />
       )}
     </div>
   )
 }
 
-// ─── Day View ─────────────────────────────────────────────────────────────────
+// ─── 통계 세그먼트 (구 Dashboard) ────────────────────────────────────────────
+
+const PERIOD_TABS = PERIOD_ORDER.map(id => ({ id, ...ALARM_PERIODS[id] }))
+
+function StatsSegment({ records }) {
+  const [periodTab, setPeriodTab] = useState('morning')
+
+  const weekDates = getLastWeekDates()
+  const period = ALARM_PERIODS[periodTab]
+  const customBehaviors = getSettings().behaviors
+  const behaviors = getEffectiveBehaviors(periodTab, customBehaviors)
+
+  const weekData = weekDates.map(({ key, label }) => {
+    const rec = records[key]
+    const routineStatus = rec?.routines?.[periodTab]?.status || null
+    return { key, label, status: routineStatus, rate: rec ? calculatePracticeRate(rec) : null, completed: rec?.completed ?? false }
+  })
+
+  const doneCount = weekData.filter(d => d.status === 'done').length
+  const skippedCount = weekData.filter(d => d.status === 'skipped').length
+  const weekRate = Math.round((doneCount / 7) * 100)
+
+  const allStats = PERIOD_ORDER.map(pid => {
+    const done = weekDates.filter(({ key }) => records[key]?.routines?.[pid]?.status === 'done').length
+    return { id: pid, done, period: ALARM_PERIODS[pid] }
+  })
+
+  return (
+    <div>
+      {/* 전체 루틴 요약 */}
+      <div className="section">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+          {allStats.map(({ id, done, period: p }) => (
+            <div key={id} className="card card-body" style={{ textAlign: 'center', padding: '12px 8px' }}>
+              <div style={{ fontSize: 20 }}>{p.icon}</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: p.color, marginTop: 4 }}>{done}</div>
+              <div style={{ fontSize: 10, color: '#A0A0B8', marginTop: 2 }}>일 완료</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 루틴 탭 */}
+      <div className="section" style={{ paddingTop: 0 }}>
+        <div style={{
+          display: 'flex', background: 'white', borderRadius: 14, padding: 4, gap: 4,
+          boxShadow: '0 2px 12px rgba(108,92,231,0.08)',
+        }}>
+          {PERIOD_TABS.map(t => (
+            <button
+              key={t.id}
+              onClick={() => setPeriodTab(t.id)}
+              style={{
+                flex: 1, padding: '8px 4px', borderRadius: 10, border: 'none', cursor: 'pointer',
+                background: periodTab === t.id ? t.gradient : 'transparent',
+                color: periodTab === t.id ? 'white' : '#A0A0B8',
+                fontSize: 11, fontWeight: 600, transition: 'all 0.2s',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+              }}
+            >
+              <span style={{ fontSize: 16 }}>{t.icon}</span>
+              <span>{t.id === 'morning' ? '아침' : t.id === 'afternoon' ? '오후' : t.id === 'evening' ? '저녁' : '취침'}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* 루틴 상세 */}
+      <div className="section" style={{ paddingTop: 0 }}>
+        {/* 루틴 헤더 + 주간 달성률 */}
+        <div className="card card-body" style={{ background: period.gradient, color: 'white', marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 36 }}>{period.icon}</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 17, fontWeight: 700 }}>{period.name}</div>
+              <div style={{ fontSize: 13, opacity: 0.85, marginTop: 2 }}>
+                {behaviors.map(b => b.title).join(' · ')}
+              </div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: 28, fontWeight: 800 }}>{weekRate}%</div>
+              <div style={{ fontSize: 11, opacity: 0.8 }}>주간 달성률</div>
+            </div>
+          </div>
+        </div>
+
+        {/* 주간 실천 현황 차트 */}
+        <div className="card card-body" style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#6E6E8A', marginBottom: 16 }}>주간 실천 현황</div>
+          <WeeklyRoutineChart data={weekData} color={period.color} gradient={period.gradient} />
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 14 }}>
+            {[['#00B894', '완료'], ['#FDCB6E', '건너뜀'], ['#EEE', '기록 없음']].map(([c, l]) => (
+              <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <div style={{ width: 10, height: 10, borderRadius: 3, background: c }} />
+                <span style={{ fontSize: 11, color: '#A0A0B8' }}>{l}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* 완료 / 건너뜀 / 기록없음 카운트 */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 12 }}>
+          <StatCard value={`${doneCount}일`} label="완료" color="#00B894" bg="#E6FBF5" />
+          <StatCard value={`${skippedCount}일`} label="건너뜀" color="#FDCB6E" bg="#FFF8E6" />
+          <StatCard value={`${7 - doneCount - skippedCount}일`} label="기록 없음" color="#A0A0B8" bg="#F5F5F5" />
+        </div>
+
+        {/* 루틴 내용 & 팁 */}
+        <div className="card">
+          <div style={{ padding: '14px 20px', borderBottom: '1px solid #F0EFF8' }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#6E6E8A' }}>이번 주 루틴 내용</div>
+          </div>
+          {behaviors.map((b, i) => (
+            <div key={b.id} style={{
+              padding: '14px 20px',
+              borderBottom: i < behaviors.length - 1 ? '1px solid #F0EFF8' : 'none',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                <div style={{
+                  width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+                  background: period.gradient,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: 'white', fontSize: 12, fontWeight: 700,
+                }}>
+                  {i + 1}
+                </div>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600 }}>{b.title}</div>
+                  <div style={{ fontSize: 12, color: '#A0A0B8', marginTop: 2, lineHeight: 1.5 }}>{b.desc}</div>
+                  <div style={{ fontSize: 11, color: '#6E6E8A', marginTop: 6, padding: '3px 8px', background: '#F5F4FF', borderRadius: 8, display: 'inline-block' }}>
+                    💡 {b.tip}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 모닝 체크인 요약 (아침 탭 전용) */}
+      {periodTab === 'morning' && <MorningCheckinSummary records={records} weekDates={weekDates} />}
+    </div>
+  )
+}
+
+// ─── 통계 세그먼트 서브컴포넌트 ──────────────────────────────────────────────
+
+function WeeklyRoutineChart({ data, color, gradient }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+      {data.map(d => {
+        const bg = d.status === 'done'
+          ? gradient
+          : d.status === 'skipped'
+            ? 'linear-gradient(135deg, #FDCB6E, #F0A030)'
+            : '#EEE'
+        const textColor = d.status === 'done' ? 'white' : d.status === 'skipped' ? 'white' : '#CCC'
+        return (
+          <div key={d.key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+            <div style={{
+              width: 38, height: 38, borderRadius: 12,
+              background: bg,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 16, color: textColor,
+            }}>
+              {d.status === 'done' ? '✓' : d.status === 'skipped' ? '–' : ''}
+            </div>
+            <div style={{ fontSize: 11, color: '#A0A0B8', fontWeight: 500 }}>{d.label}</div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function MorningCheckinSummary({ records, weekDates }) {
+  const completedDays = weekDates.map(({ key }) => records[key]).filter(r => r?.completed)
+  if (completedDays.length === 0) return null
+
+  const sleepDays = completedDays.filter(r => r.sleepHours)
+  const avgSleep = sleepDays.length
+    ? Math.round(sleepDays.reduce((s, r) => s + r.sleepHours, 0) / sleepDays.length * 10) / 10
+    : 0
+  const wakeOnTimeCount = completedDays.filter(r => r.wakeOnTime).length
+  const exerciseCount = completedDays.filter(r => r.exercise).length
+
+  return (
+    <div className="section" style={{ paddingBottom: 20 }}>
+      <div className="section-title">모닝 체크인 요약</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+        <StatCard value={`${avgSleep}h`} label="평균 수면" color="#6C5CE7" bg="#F5F4FF" />
+        <StatCard value={`${wakeOnTimeCount}일`} label="제 시간 기상" color="#00B894" bg="#E6FBF5" />
+        <StatCard value={`${exerciseCount}일`} label="운동 완료" color="#00CEC9" bg="#E6FAFA" />
+      </div>
+      <div className="card card-body" style={{ marginTop: 12 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: '#6E6E8A', marginBottom: 14 }}>수면 시간 (주간)</div>
+        <SleepBarChart
+          data={weekDates.map(({ key, label }) => ({
+            label,
+            value: records[key]?.sleepHours ?? null,
+            filled: records[key]?.completed ?? false,
+          }))}
+          maxValue={10}
+          color="#6C5CE7"
+          unit="h"
+          referenceLines={[{ value: 7, color: '#00B894' }, { value: 9, color: '#FDCB6E' }]}
+        />
+      </div>
+    </div>
+  )
+}
+
+function StatCard({ value, label, color, bg }) {
+  return (
+    <div className="card card-body" style={{ textAlign: 'center', padding: '14px 8px', background: bg }}>
+      <div style={{ fontSize: 20, fontWeight: 800, color }}>{value}</div>
+      <div style={{ fontSize: 11, color: '#A0A0B8', marginTop: 3 }}>{label}</div>
+    </div>
+  )
+}
+
+function SleepBarChart({ data, maxValue, color, unit = '', referenceLines = [] }) {
+  const barW = 32
+  const gap = 8
+  const padLeft = 8
+  const padBottom = 28
+  const padTop = 20
+  const height = 130
+  const totalW = data.length * (barW + gap) - gap + padLeft
+  const chartH = height - padBottom - padTop
+  const scale = val => (val / maxValue) * chartH
+
+  return (
+    <div className="chart-wrap">
+      <svg width="100%" viewBox={`0 0 ${totalW} ${height}`} style={{ overflow: 'visible' }}>
+        {referenceLines.map(({ value, color: lc }) => {
+          const y = padTop + chartH - scale(value)
+          return (
+            <line key={value} x1={padLeft} y1={y} x2={totalW} y2={y}
+              stroke={lc} strokeWidth="1.5" strokeDasharray="4 3" opacity="0.6" />
+          )
+        })}
+        {data.map((item, i) => {
+          const x = padLeft + i * (barW + gap)
+          const val = item.value ?? 0
+          const barH = Math.max(val > 0 ? scale(val) : 0, val > 0 ? 4 : 0)
+          const y = padTop + chartH - barH
+          return (
+            <g key={i}>
+              <rect x={x} y={padTop} width={barW} height={chartH} rx={6} fill="#F5F4FF" />
+              {item.filled && val > 0 && (
+                <rect x={x} y={y} width={barW} height={barH} rx={6} fill={color} opacity="0.85" />
+              )}
+              {item.filled && val > 0 && (
+                <text x={x + barW / 2} y={y - 4} textAnchor="middle" fontSize="10" fill={color} fontWeight="600">
+                  {val}{unit}
+                </text>
+              )}
+              <text x={x + barW / 2} y={height - 4} textAnchor="middle" fontSize="11" fill="#A0A0B8" fontWeight="500">
+                {item.label}
+              </text>
+            </g>
+          )
+        })}
+      </svg>
+    </div>
+  )
+}
+
+// ─── 탐색 뷰: 일 ─────────────────────────────────────────────────────────────
 
 function DayView({ date, records, todayKey, onUpdate }) {
   const navigate = useNavigate()
@@ -274,10 +577,7 @@ function DayView({ date, records, todayKey, onUpdate }) {
         </div>
         {isToday && (
           <div style={{ padding: '0 16px' }}>
-            <button
-              onClick={() => navigate('/checkin')}
-              className="btn btn-primary btn-full"
-            >
+            <button onClick={() => navigate('/checkin')} className="btn btn-primary btn-full">
               오늘 체크인 작성하기
             </button>
           </div>
@@ -308,7 +608,7 @@ function DayView({ date, records, todayKey, onUpdate }) {
   )
 }
 
-// ─── Week View ────────────────────────────────────────────────────────────────
+// ─── 탐색 뷰: 주 ─────────────────────────────────────────────────────────────
 
 function WeekView({ date, records, todayKey, onGoToDay }) {
   const weekStart = getWeekStart(date)
@@ -337,7 +637,7 @@ function WeekView({ date, records, todayKey, onGoToDay }) {
 
   return (
     <div>
-      {/* Bar chart */}
+      {/* 요일별 바차트 */}
       <div className="section" style={{ paddingTop: 12, paddingBottom: 0 }}>
         <div className="card card-body">
           <div style={{ fontSize: 13, fontWeight: 600, color: '#6E6E8A', marginBottom: 14 }}>요일별 실천율</div>
@@ -379,8 +679,6 @@ function WeekView({ date, records, todayKey, onGoToDay }) {
               )
             })}
           </div>
-
-          {/* Legend */}
           <div style={{ display: 'flex', justifyContent: 'center', gap: 14, marginTop: 10 }}>
             {[['#00B894', '75%+'], ['#FDCB6E', '50%+'], ['#FF7675', '50% 미만']].map(([c, l]) => (
               <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -392,7 +690,7 @@ function WeekView({ date, records, todayKey, onGoToDay }) {
         </div>
       </div>
 
-      {/* Summary cards */}
+      {/* 요약 카드 */}
       <div className="section" style={{ paddingTop: 10, paddingBottom: 0 }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
           <SummaryCard icon="📊" label="평균 실천율" value={avgRate !== null ? `${avgRate}%` : '-'} color="#6C5CE7" />
@@ -401,7 +699,7 @@ function WeekView({ date, records, todayKey, onGoToDay }) {
         </div>
       </div>
 
-      {/* 7 mini day cards */}
+      {/* 7일 미니 카드 */}
       <div className="section" style={{ paddingTop: 10 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {weekDates.map((d, i) => (
@@ -421,7 +719,7 @@ function WeekView({ date, records, todayKey, onGoToDay }) {
   )
 }
 
-// ─── Month View ───────────────────────────────────────────────────────────────
+// ─── 탐색 뷰: 월 ─────────────────────────────────────────────────────────────
 
 function MonthView({ date, records, todayKey, onGoToDay }) {
   const year = date.getFullYear()
@@ -450,7 +748,6 @@ function MonthView({ date, records, todayKey, onGoToDay }) {
     ? Math.round(ratedDays.reduce((s, r) => s + calculatePracticeRate(r), 0) / ratedDays.length)
     : null
 
-  // Sleep line chart
   const sleepData = []
   for (let d = 1; d <= daysInMonth; d++) {
     const r = records[dk(d)]
@@ -459,7 +756,7 @@ function MonthView({ date, records, todayKey, onGoToDay }) {
 
   return (
     <div>
-      {/* Calendar */}
+      {/* 월 캘린더 */}
       <div className="section" style={{ paddingTop: 12, paddingBottom: 0 }}>
         <div className="card card-body">
           <div className="calendar-grid" style={{ marginBottom: 6 }}>
@@ -507,7 +804,7 @@ function MonthView({ date, records, todayKey, onGoToDay }) {
         </div>
       </div>
 
-      {/* Monthly stats */}
+      {/* 월간 통계 */}
       <div className="section" style={{ paddingTop: 10, paddingBottom: 0 }}>
         <div className="section-title">월간 통계</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
@@ -517,7 +814,7 @@ function MonthView({ date, records, todayKey, onGoToDay }) {
         </div>
       </div>
 
-      {/* Sleep line chart */}
+      {/* 수면 라인차트 */}
       {sleepData.length > 1 && (
         <div className="section" style={{ paddingTop: 10 }}>
           <div className="section-title">월간 수면시간</div>
@@ -545,7 +842,7 @@ function MonthView({ date, records, todayKey, onGoToDay }) {
   )
 }
 
-// ─── Record Detail (Day view body) ────────────────────────────────────────────
+// ─── 하루 상세 기록 ───────────────────────────────────────────────────────────
 
 function RecordDetail({ record, dateKey, onUpdate }) {
   const [editingKey, setEditingKey] = useState(null)
@@ -573,7 +870,7 @@ function RecordDetail({ record, dateKey, onUpdate }) {
 
   return (
     <div>
-      {/* Practice rate + action counts */}
+      {/* 실천율 + 액션 카운트 */}
       <div className="section" style={{ paddingTop: 12, paddingBottom: 0 }}>
         <div className="card card-body">
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 14 }}>
@@ -607,7 +904,7 @@ function RecordDetail({ record, dateKey, onUpdate }) {
         </div>
       </div>
 
-      {/* Sleep */}
+      {/* 수면 */}
       {record.completed && (
         <div className="section" style={{ paddingTop: 10, paddingBottom: 0 }}>
           <div className="card card-body">
@@ -615,10 +912,7 @@ function RecordDetail({ record, dateKey, onUpdate }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 14, fontWeight: 600 }}>{fmt12(record.sleepTime)}</span>
               <span style={{ fontSize: 13, color: '#B0B0C8' }}>→</span>
-              <span style={{
-                fontSize: 14, fontWeight: 600,
-                color: record.wakeOnTime ? '#00B894' : '#FF7675',
-              }}>
+              <span style={{ fontSize: 14, fontWeight: 600, color: record.wakeOnTime ? '#00B894' : '#FF7675' }}>
                 {fmt12(record.wakeTime)}
               </span>
               <span style={{ fontSize: 12, color: '#B0B0C8' }}>
@@ -641,7 +935,7 @@ function RecordDetail({ record, dateKey, onUpdate }) {
         </div>
       )}
 
-      {/* Meals */}
+      {/* 식사 */}
       {record.completed && record.meals && (
         <div className="section" style={{ paddingTop: 10, paddingBottom: 0 }}>
           <div className="card card-body">
@@ -659,10 +953,7 @@ function RecordDetail({ record, dateKey, onUpdate }) {
                 return (
                   <div
                     key={key}
-                    style={{
-                      padding: '10px 12px', borderRadius: 12,
-                      background: eaten ? '#F0FBF7' : '#F5F5FA',
-                    }}
+                    style={{ padding: '10px 12px', borderRadius: 12, background: eaten ? '#F0FBF7' : '#F5F5FA' }}
                   >
                     <div style={{ fontSize: 12, color: '#A0A0B8', marginBottom: 4 }}>{icon} {label}</div>
                     <div style={{ fontSize: 14, fontWeight: 600, color: eaten ? '#00B894' : '#C0C0D0' }}>
@@ -676,7 +967,7 @@ function RecordDetail({ record, dateKey, onUpdate }) {
         </div>
       )}
 
-      {/* Exercise */}
+      {/* 운동 */}
       {record.completed && (
         <div className="section" style={{ paddingTop: 10, paddingBottom: 0 }}>
           <div className="card card-body" style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
@@ -695,7 +986,7 @@ function RecordDetail({ record, dateKey, onUpdate }) {
         </div>
       )}
 
-      {/* Routine list */}
+      {/* 루틴 목록 */}
       <div className="section" style={{ paddingTop: 10 }}>
         <div className="card card-body">
           <div style={{ fontSize: 13, fontWeight: 600, color: '#6E6E8A', marginBottom: 12 }}>
@@ -743,7 +1034,7 @@ function RecordDetail({ record, dateKey, onUpdate }) {
   )
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+// ─── 공통 서브컴포넌트 ────────────────────────────────────────────────────────
 
 function RoutineRow({ icon, iconGradient, label, sublabel, status, isEditing, onEdit, onSave, onCancel }) {
   const cfg = {
@@ -813,15 +1104,12 @@ function MiniDayCard({ date, dayLabel, record, rate, isToday, onClick }) {
         border: isToday ? '2px solid #6C5CE7' : '1.5px solid transparent',
       }}
     >
-      {/* Date label */}
       <div style={{ width: 40, textAlign: 'center', flexShrink: 0 }}>
         <div style={{ fontSize: 11, color: '#A0A0B8' }}>{dayLabel}</div>
         <div style={{ fontSize: 18, fontWeight: isToday ? 700 : 500, color: isToday ? '#6C5CE7' : '#1E1E2E', lineHeight: 1.2 }}>
           {date.getDate()}
         </div>
       </div>
-
-      {/* Rate bubble */}
       <div style={{
         width: 44, height: 44, borderRadius: '50%', flexShrink: 0,
         background: rate !== null ? `${rateColor}20` : '#F5F5FA',
@@ -831,8 +1119,6 @@ function MiniDayCard({ date, dayLabel, record, rate, isToday, onClick }) {
           {rate !== null ? `${rate}%` : '—'}
         </span>
       </div>
-
-      {/* Brief health info */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
         {record?.completed ? (
           <>
@@ -851,13 +1137,12 @@ function MiniDayCard({ date, dayLabel, record, rate, isToday, onClick }) {
           <span style={{ fontSize: 12, color: '#C0C0D0' }}>{record ? '루틴만 기록' : '기록 없음'}</span>
         )}
       </div>
-
       <span style={{ fontSize: 18, color: '#D0D0D8' }}>›</span>
     </div>
   )
 }
 
-// ─── Date Picker Modal ────────────────────────────────────────────────────────
+// ─── 날짜 선택 모달 ───────────────────────────────────────────────────────────
 
 function DatePickerModal({ value, tab, onSelect, onClose }) {
   const [pickerYear, setPickerYear] = useState(value.getFullYear())
@@ -873,7 +1158,6 @@ function DatePickerModal({ value, tab, onSelect, onClose }) {
     else setPickerMonth(m => m + 1)
   }
 
-  // Month picker (for month tab)
   if (tab === 'month') {
     return (
       <div
@@ -923,7 +1207,6 @@ function DatePickerModal({ value, tab, onSelect, onClose }) {
     )
   }
 
-  // Day / Week picker (bottom sheet with full calendar)
   const firstDay = new Date(pickerYear, pickerMonth, 1).getDay()
   const daysInMonth = new Date(pickerYear, pickerMonth + 1, 0).getDate()
 
@@ -936,24 +1219,17 @@ function DatePickerModal({ value, tab, onSelect, onClose }) {
         style={{ background: 'white', borderRadius: '20px 20px 0 0', padding: '16px 16px 36px', width: '100%', maxWidth: 480 }}
         onClick={e => e.stopPropagation()}
       >
-        {/* Handle bar */}
         <div style={{ width: 36, height: 4, borderRadius: 2, background: '#E0E0E0', margin: '0 auto 18px' }} />
-
-        {/* Month nav */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <button onClick={prevM} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#6C5CE7', padding: '4px 12px' }}>‹</button>
           <span style={{ fontSize: 16, fontWeight: 700 }}>{pickerYear}년 {pickerMonth + 1}월</span>
           <button onClick={nextM} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#6C5CE7', padding: '4px 12px' }}>›</button>
         </div>
-
-        {/* Day headers */}
         <div className="calendar-grid" style={{ marginBottom: 6 }}>
           {DAY_NAMES.map((d, i) => (
             <div key={d} className="cal-day-header" style={{ color: i === 0 ? '#FF7675' : i === 6 ? '#6C5CE7' : undefined }}>{d}</div>
           ))}
         </div>
-
-        {/* Days */}
         <div className="calendar-grid">
           {Array.from({ length: firstDay }, (_, i) => <div key={`e${i}`} />)}
           {Array.from({ length: daysInMonth }, (_, i) => {
@@ -979,7 +1255,6 @@ function DatePickerModal({ value, tab, onSelect, onClose }) {
             )
           })}
         </div>
-
         <button
           onClick={onClose}
           style={{ marginTop: 16, width: '100%', padding: '12px', borderRadius: 12, border: 'none', cursor: 'pointer', background: '#F5F5FA', color: '#A0A0B8', fontSize: 14 }}

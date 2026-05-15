@@ -17,7 +17,7 @@ import Onboarding from './pages/Onboarding'
 import Home from './pages/Home'
 import MorningCheckin from './pages/MorningCheckin'
 import Records from './pages/Records'
-import Dashboard from './pages/Dashboard'
+import Character from './pages/Character'
 import Settings from './pages/Settings'
 import CircadianDetailPage from './pages/CircadianDetailPage'
 import HealthRecords from './pages/HealthRecords'
@@ -108,7 +108,7 @@ function AppContent() {
           <Route path="/" element={<Home />} />
           <Route path="/checkin" element={<MorningCheckin />} />
           <Route path="/records" element={<Records />} />
-          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/character" element={<Character />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/circadian-detail" element={<CircadianDetailPage />} />
           <Route path="/health-records" element={<HealthRecords />} />

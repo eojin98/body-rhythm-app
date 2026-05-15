@@ -652,6 +652,54 @@ body {
 }
 .fade-up { animation: fadeUp 0.3s ease; }
 
+/* ===== CHARACTER EVOLVE OVERLAY ===== */
+@keyframes evolveIn {
+  0%   { opacity: 0; transform: scale(0.85); }
+  12%  { opacity: 1; transform: scale(1.04); }
+  20%  { transform: scale(1); }
+  80%  { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.06); }
+}
+
+@keyframes emojiBounce {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50%       { transform: translateY(-14px) scale(1.12); }
+}
+
+.evolve-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(108, 92, 231, 0.93);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  animation: evolveIn 2.8s ease forwards;
+  cursor: pointer;
+}
+
+.evolve-emoji {
+  font-size: 90px;
+  line-height: 1;
+  margin-bottom: 20px;
+  animation: emojiBounce 0.9s ease infinite;
+  user-select: none;
+}
+
+.evolve-title {
+  color: white;
+  font-size: 26px;
+  font-weight: 800;
+  margin-bottom: 10px;
+  letter-spacing: -0.3px;
+}
+
+.evolve-sub {
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 16px;
+}
+
 /* Notification banner */
 .notif-banner {
   margin: 16px;
