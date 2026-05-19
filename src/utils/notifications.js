@@ -36,9 +36,11 @@ async function resolveChannelId(soundMode) {
 }
 
 // ─── Notification Channels (Android 8+) ──────────────────────────────────────
+// v2: alarm_vibrate importance 5→4, alarm_silent importance 3→2
+// 채널은 한 번 생성되면 Android가 설정을 캐시하므로 importance 변경 시 ID도 변경해야 함
 const CHANNEL_SOUND   = 'alarm_sound'
-const CHANNEL_VIBRATE = 'alarm_vibrate'
-const CHANNEL_SILENT  = 'alarm_silent'
+const CHANNEL_VIBRATE = 'alarm_vibrate_v2'
+const CHANNEL_SILENT  = 'alarm_silent_v2'
 
 export async function initNotificationChannels() {
   if (!isNative()) return
@@ -54,10 +56,12 @@ export async function initNotificationChannels() {
       visibility: 1,
     })
     await LocalNotifications.createChannel({
-      id: CHANNEL_VIBRATE,
+      id: CHANNEL_VIBRATE,   // 'alarm_vibrate_v2'
       name: '알람 (진동만)',
       description: '진동으로만 알람을 알립니다',
-      importance: 5,
+      // importance 4 (HIGH): heads-up 표시 유지하면서 sound: null이 올바르게 적용됨
+      // importance 5 (MAX)에서는 일부 Android 버전이 sound: null을 무시함
+      importance: 4,
       vibration: true,
       sound: null,
       lights: true,
@@ -65,10 +69,12 @@ export async function initNotificationChannels() {
       visibility: 1,
     })
     await LocalNotifications.createChannel({
-      id: CHANNEL_SILENT,
+      id: CHANNEL_SILENT,   // 'alarm_silent_v2'
       name: '알람 (무음)',
       description: '소리와 진동 없이 알람을 표시합니다',
-      importance: 3,
+      // importance 2 (LOW): Android에서 소리·진동을 확실히 차단하는 유일한 방법
+      // importance 3 (DEFAULT)은 기본적으로 소리를 재생함
+      importance: 2,
       vibration: false,
       sound: null,
       lights: false,
