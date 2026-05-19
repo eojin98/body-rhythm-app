@@ -82,7 +82,7 @@ export default function Character() {
 
           {/* Name row */}
           {editingName ? (
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center', marginBottom: 12 }}>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center' }}>
               <input
                 value={nameInput}
                 onChange={e => setNameInput(e.target.value)}
@@ -114,29 +114,21 @@ export default function Character() {
               >취소</button>
             </div>
           ) : (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 12 }}>
-              <span style={{ fontSize: 24, fontWeight: 800, color: '#1E1E2E' }}>{characterName}</span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+              <span style={{
+                fontSize: 24, fontWeight: 800, color: '#1E1E2E',
+                maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>{characterName}</span>
               <button
                 onClick={startEditName}
                 style={{
                   background: 'none', border: '1px solid #D0CFEE', borderRadius: 6,
                   padding: '2px 10px', color: '#A0A0B8', cursor: 'pointer',
-                  fontSize: 12, fontFamily: 'inherit',
+                  fontSize: 12, fontFamily: 'inherit', flexShrink: 0,
                 }}
               >변경</button>
             </div>
           )}
-
-          {/* Stage badge */}
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            background: 'white', borderRadius: 20, padding: '5px 16px',
-            boxShadow: '0 1px 6px rgba(108,92,231,0.15)',
-          }}>
-            {stage.badge && <span style={{ fontSize: 14 }}>{stage.badge}</span>}
-            <span style={{ fontSize: 14, fontWeight: 700, color: '#6C5CE7' }}>{stage.name}</span>
-          </div>
-          <p style={{ fontSize: 13, color: '#888', marginTop: 10 }}>{stage.description}</p>
         </div>
       </div>
 
