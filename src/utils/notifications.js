@@ -227,7 +227,8 @@ export async function scheduleAlarmNotifications(alarm, soundMode) {
     actionTypeId: 'HABIT_ACTION',
     extra: { periodId: alarm.type, alarmId: alarm.id },
     schedule: {
-      on: { weekday: dayIndex + 1, hour, minute },
+      // second: 0 — Android AlarmManager가 초 단위를 현재 시각에서 상속하지 않도록 명시
+      on: { weekday: dayIndex + 1, hour, minute, second: 0 },
       repeats: true,
       allowWhileIdle: true,
       exact: true,
@@ -246,6 +247,8 @@ export async function scheduleSnoozeNotification(alarm, snoozeMins = 30) {
   try {
     await LocalNotifications.cancel({ notifications: [{ id: snoozeId }] })
   } catch {}
+  const snoozeAt = new Date(Date.now() + snoozeMins * 60 * 1000)
+  snoozeAt.setSeconds(0, 0)
   await LocalNotifications.schedule({
     notifications: [{
       id: snoozeId,
@@ -255,7 +258,7 @@ export async function scheduleSnoozeNotification(alarm, snoozeMins = 30) {
       actionTypeId: 'HABIT_ACTION',
       extra: { periodId: alarm.type, alarmId: alarm.id },
       schedule: {
-        at: new Date(Date.now() + snoozeMins * 60 * 1000),
+        at: snoozeAt,
         allowWhileIdle: true,
         exact: true,
       },
@@ -275,6 +278,8 @@ export async function scheduleTestSnoozeNotification(hk, behavior, snoozeMins = 
   try {
     await LocalNotifications.cancel({ notifications: [{ id: TEST_SNOOZE_NOTIF_ID }] })
   } catch {}
+  const testSnoozeAt = new Date(Date.now() + snoozeMins * 60 * 1000)
+  testSnoozeAt.setSeconds(0, 0)
   await LocalNotifications.schedule({
     notifications: [{
       id: TEST_SNOOZE_NOTIF_ID,
@@ -284,7 +289,7 @@ export async function scheduleTestSnoozeNotification(hk, behavior, snoozeMins = 
       actionTypeId: 'HABIT_ACTION',
       extra: { periodId: `test_${hk}` },
       schedule: {
-        at: new Date(Date.now() + snoozeMins * 60 * 1000),
+        at: testSnoozeAt,
         allowWhileIdle: true,
         exact: true,
       },
@@ -334,7 +339,7 @@ export async function scheduleTestHourlyNotifications() {
       actionTypeId: 'HABIT_ACTION',
       extra: { periodId: `test_${hk}` },
       schedule: {
-        on: { hour: h, minute: 0 },
+        on: { hour: h, minute: 0, second: 0 },
         repeats: true,
         allowWhileIdle: true,
         exact: true,

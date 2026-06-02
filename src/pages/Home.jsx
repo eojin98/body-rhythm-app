@@ -189,6 +189,17 @@ export default function Home() {
     ? firedTestAlarms.filter(t => t.status === 'done').length
     : firedRegularAlarms.filter(a => todayRecord?.routines?.[a.type]?.status === 'done').length
 
+  const totalAlarmsToday = settings.testMode
+    ? Object.keys(TEST_HOURLY_BEHAVIORS).length
+    : settings.alarms.filter(a => a.enabled && a.days.includes(now2.getDay())).length
+  const remainingAlarms = settings.testMode
+    ? Object.keys(TEST_HOURLY_BEHAVIORS).length - firedTestAlarms.length
+    : settings.alarms.filter(a => {
+        if (!a.enabled || !a.days.includes(now2.getDay())) return false
+        const [rh, rm] = a.time.split(':').map(Number)
+        return rh * 60 + rm > nowMins2
+      }).length
+
   const [hourData, setHourData] = useState(() => getCurrentHourData())
   const [editingKey, setEditingKey] = useState(null)
 
@@ -315,21 +326,31 @@ export default function Home() {
             <div className="progress-ring-wrap" style={{ position: 'relative', width: 100, height: 100 }}>
               <ProgressRing percent={practiceRate} size={100} strokeWidth={9} />
               <div className="progress-ring-inner">
-                <div style={{ fontSize: 22, fontWeight: 800, color: '#6C5CE7' }}>{practiceRate}%</div>
-                <div style={{ fontSize: 10, color: '#A0A0B8', fontWeight: 500 }}>실천율</div>
+                <div style={{ fontSize: 20, fontWeight: 800, color: '#6C5CE7', lineHeight: 1.1 }}>{practiceRate}%</div>
+                {firedCount > 0 && (
+                  <div style={{ fontSize: 11, fontWeight: 600, color: '#9B8FEE', lineHeight: 1.3 }}>{doneCount}/{firedCount}</div>
+                )}
               </div>
             </div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>오늘의 실천율</div>
-              {firedCount > 0 ? (
-                <div style={{ fontSize: 13, color: '#6E6E8A', marginBottom: 6 }}>
-                  {doneCount}개 완료 / {firedCount}개 알람
-                </div>
+              <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>오늘의 실천율</div>
+              {totalAlarmsToday === 0 ? (
+                <div style={{ fontSize: 13, color: '#A0A0B8' }}>오늘 설정된 알람이 없어요</div>
+              ) : firedCount === 0 ? (
+                <>
+                  <div style={{ fontSize: 12, color: '#A0A0B8', marginBottom: 4 }}>오늘 첫 알람을 기다리는 중</div>
+                  <div style={{ fontSize: 11, color: '#C0C0D0' }}>오늘 전체 {totalAlarmsToday}개 · 남은 알람 {remainingAlarms}개</div>
+                </>
+              ) : practiceRate === 100 ? (
+                <>
+                  <div style={{ fontSize: 13, color: '#00B894', fontWeight: 600, marginBottom: 4 }}>완벽한 실천! 🎉</div>
+                  <div style={{ fontSize: 11, color: '#A0A0B8' }}>오늘 전체 {totalAlarmsToday}개 · 남은 알람 {remainingAlarms}개</div>
+                </>
               ) : (
-                <div style={{ fontSize: 13, color: '#A0A0B8', marginBottom: 6 }}>아직 울린 알람이 없어요</div>
-              )}
-              {practiceRate === 100 && firedCount > 0 && (
-                <div style={{ fontSize: 12, color: '#00B894', fontWeight: 600 }}>완벽한 실천! 🎉</div>
+                <>
+                  <div style={{ fontSize: 13, color: '#6E6E8A', marginBottom: 4 }}>{doneCount}개 완료 / {firedCount}개 알람</div>
+                  <div style={{ fontSize: 11, color: '#A0A0B8' }}>오늘 전체 {totalAlarmsToday}개 · 남은 알람 {remainingAlarms}개</div>
+                </>
               )}
             </div>
           </div>
