@@ -10,16 +10,28 @@ import {
   cancelAllAlarmNotifications,
   initNotificationChannels,
 } from '../utils/notifications'
+import {
+  isBatteryOptIgnored,
+  requestBatteryOptExemption,
+  canScheduleExactAlarms,
+  openExactAlarmSettings,
+} from '../utils/batteryOpt'
 import { ALARM_PERIODS, PERIOD_ORDER, getEffectiveBehaviors } from '../utils/alarmContent'
 
 export default function Settings() {
   const [settings, setSettings] = useState(getSettings)
   const [notifStatus, setNotifStatus] = useState(getPermissionStatus)
   const [importMsg, setImportMsg] = useState(null)
+  const [batteryIgnored, setBatteryIgnored] = useState(true)
+  const [exactAlarmOk, setExactAlarmOk] = useState(true)
   const fileInputRef = useRef(null)
 
   useEffect(() => {
     checkPermissionStatusAsync().then(setNotifStatus)
+    if (Capacitor.isNativePlatform()) {
+      isBatteryOptIgnored().then(setBatteryIgnored)
+      canScheduleExactAlarms().then(setExactAlarmOk)
+    }
   }, [])
 
   const persistSettings = (updated) => {
@@ -141,6 +153,68 @@ export default function Settings() {
           )}
         </div>
       </div>
+
+      {/* Alarm accuracy (Android only) */}
+      {Capacitor.isNativePlatform() && (
+        <div className="section">
+          <div className="section-title">알람 정확도</div>
+          <div className="card card-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {batteryIgnored && exactAlarmOk ? (
+              <div style={{ fontSize: 13, color: '#00B894', fontWeight: 600 }}>✅ 모든 권한 설정 완료 — 알람이 정확하게 울립니다</div>
+            ) : (
+              <>
+                <div style={{ fontSize: 13, color: '#7A5800', background: '#FFF8E6', borderRadius: 10, padding: '10px 12px', lineHeight: 1.6 }}>
+                  ⚠️ 아래 설정을 허용해야 잠금 화면에서도 알람이 정확히 울립니다.
+                </div>
+
+                {!batteryIgnored && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0' }}>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600 }}>배터리 최적화 제외</div>
+                      <div style={{ fontSize: 12, color: '#FF7675', marginTop: 2 }}>미설정 — Doze 모드에서 알람 지연 가능</div>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        await requestBatteryOptExemption()
+                        setTimeout(() => isBatteryOptIgnored().then(setBatteryIgnored), 1500)
+                      }}
+                      style={{
+                        background: '#6C5CE7', color: 'white', border: 'none',
+                        borderRadius: 10, padding: '8px 14px', fontSize: 13,
+                        fontWeight: 600, cursor: 'pointer', flexShrink: 0,
+                      }}
+                    >
+                      허용하기
+                    </button>
+                  </div>
+                )}
+
+                {!exactAlarmOk && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0' }}>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600 }}>정확한 알람 권한</div>
+                      <div style={{ fontSize: 12, color: '#FF7675', marginTop: 2 }}>미설정 — Android 12+ 필수 권한</div>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        await openExactAlarmSettings()
+                        setTimeout(() => canScheduleExactAlarms().then(setExactAlarmOk), 1500)
+                      }}
+                      style={{
+                        background: '#6C5CE7', color: 'white', border: 'none',
+                        borderRadius: 10, padding: '8px 14px', fontSize: 13,
+                        fontWeight: 600, cursor: 'pointer', flexShrink: 0,
+                      }}
+                    >
+                      허용하기
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Alarm sound mode */}
       <div className="section">
