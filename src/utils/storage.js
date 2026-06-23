@@ -41,6 +41,7 @@ const DEFAULT_SETTINGS = {
   testMode: false,
   alarmSoundMode: 'sound', // 'sound' | 'vibrate' | 'silent'
   notificationsEnabled: true,
+  hourlyAlarmSettings: {}, // { [hk: '07'~'23']: { enabled: boolean, boostMode: boolean } }
   appVersion: APP_VERSION,
 }
 
@@ -67,7 +68,10 @@ export function getSettings() {
     }
     const migrated = migrateSettings(saved)
     if (migrated !== saved) saveSettings(migrated)
-    return { ...DEFAULT_SETTINGS, ...migrated }
+    const result = { ...DEFAULT_SETTINGS, ...migrated }
+    // Ensure hourlyAlarmSettings always exists (migration for pre-existing saves)
+    if (!result.hourlyAlarmSettings) result.hourlyAlarmSettings = {}
+    return result
   } catch {
     return { ...DEFAULT_SETTINGS, alarms: [...DEFAULT_ALARMS] }
   }

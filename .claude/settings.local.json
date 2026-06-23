@@ -7,7 +7,8 @@
       "Bash(ngrok config:*)",
       "Bash(xargs grep:*)",
       "Bash(grep -E \"\\\\.\\(java|kt|xml\\)$\")",
-      "Bash(npx vite *)"
+      "Bash(npx vite *)",
+      "PowerShell($javaCmd = Get-Command java -ErrorAction SilentlyContinue; if \\($javaCmd\\) { $javaCmd.Source } else { \"not found\" }; Test-Path \"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\\\\bin\\\\java.exe\")"
     ]
   }
 }

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
 import { getSettings, saveSettings, DAY_NAMES, APP_VERSION, exportAllData, importAllData } from '../utils/storage'
 import {
@@ -19,6 +20,7 @@ import {
 import { ALARM_PERIODS, PERIOD_ORDER, getEffectiveBehaviors } from '../utils/alarmContent'
 
 export default function Settings() {
+  const navigate = useNavigate()
   const [settings, setSettings] = useState(getSettings)
   const [notifStatus, setNotifStatus] = useState(getPermissionStatus)
   const [importMsg, setImportMsg] = useState(null)
@@ -268,18 +270,35 @@ export default function Settings() {
               <div style={{ fontSize: 15, fontWeight: 600 }}>매 시간별 알람</div>
               <div style={{ fontSize: 13, color: '#A0A0B8', marginTop: 2 }}>매 정시마다 시간별 행동양식 알람</div>
             </div>
-            <label className="toggle-wrap">
-              <input
-                type="checkbox"
-                checked={settings.testMode || false}
-                onChange={() => {
-                  const updated = { ...settings, testMode: !settings.testMode }
-                  persistSettings(updated)
-                  syncAllAlarmNotifications(updated.alarms, updated.testMode)
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button
+                onClick={() => navigate('/hourly-alarm-edit')}
+                style={{
+                  background: '#F5F4FF',
+                  color: '#6C5CE7',
+                  border: '1.5px solid #DDD9F8',
+                  borderRadius: 10,
+                  padding: '6px 14px',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: 'pointer',
                 }}
-              />
-              <div className="toggle-track" />
-            </label>
+              >
+                편집
+              </button>
+              <label className="toggle-wrap">
+                <input
+                  type="checkbox"
+                  checked={settings.testMode || false}
+                  onChange={() => {
+                    const updated = { ...settings, testMode: !settings.testMode }
+                    persistSettings(updated)
+                    syncAllAlarmNotifications(updated.alarms, updated.testMode)
+                  }}
+                />
+                <div className="toggle-track" />
+              </label>
+            </div>
           </div>
           {settings.testMode && (
             <div style={{ marginTop: 10, padding: '8px 12px', background: '#FFF8E6', borderRadius: 8, fontSize: 12, color: '#7A5800', lineHeight: 1.5 }}>

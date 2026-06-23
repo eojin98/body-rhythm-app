@@ -320,7 +320,7 @@ export async function cancelAllAlarmNotifications(alarms) {
 // Test mode: hourly notifications 7:00–23:00 every day (IDs 9007–9023)
 const TEST_HOURLY_NOTIF_BASE_ID = 9000
 
-export async function scheduleTestHourlyNotifications() {
+export async function scheduleTestHourlyNotifications(hourlyAlarmSettings = {}) {
   if (!isNative()) return
   await cancelTestHourlyNotifications()
   const channelId = await resolveChannelId(getSettings().alarmSoundMode ?? 'sound')
@@ -329,6 +329,8 @@ export async function scheduleTestHourlyNotifications() {
     const hk = String(h).padStart(2, '0')
     const behavior = TEST_HOURLY_BEHAVIORS[hk]
     if (!behavior) continue
+    const hourSetting = hourlyAlarmSettings[hk] ?? { enabled: true }
+    if (!hourSetting.enabled) continue
     const dh = h === 0 ? 12 : h > 12 ? h - 12 : h
     const period = h < 12 ? '오전' : '오후'
     notifications.push({
@@ -346,7 +348,9 @@ export async function scheduleTestHourlyNotifications() {
       },
     })
   }
-  await LocalNotifications.schedule({ notifications })
+  if (notifications.length > 0) {
+    await LocalNotifications.schedule({ notifications })
+  }
 }
 
 export async function cancelTestHourlyNotifications() {
@@ -368,7 +372,7 @@ export async function syncAllAlarmNotifications(alarms, testMode = false) {
     await scheduleAlarmNotifications(alarm)
   }
   if (testMode) {
-    await scheduleTestHourlyNotifications()
+    await scheduleTestHourlyNotifications(settings.hourlyAlarmSettings ?? {})
   } else {
     await cancelTestHourlyNotifications()
   }
