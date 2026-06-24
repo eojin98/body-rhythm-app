@@ -8,7 +8,9 @@
       "Bash(xargs grep:*)",
       "Bash(grep -E \"\\\\.\\(java|kt|xml\\)$\")",
       "Bash(npx vite *)",
-      "PowerShell($javaCmd = Get-Command java -ErrorAction SilentlyContinue; if \\($javaCmd\\) { $javaCmd.Source } else { \"not found\" }; Test-Path \"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\\\\bin\\\\java.exe\")"
+      "PowerShell($javaCmd = Get-Command java -ErrorAction SilentlyContinue; if \\($javaCmd\\) { $javaCmd.Source } else { \"not found\" }; Test-Path \"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\\\\bin\\\\java.exe\")",
+      "PowerShell(Get-ChildItem -Recurse -Path \"C:\\\\Users\\\\RLRC\\\\Desktop\\\\Vibe_Coding\\\\Alarm\\\\android\" -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match \"plugin|capacitor\" } | Select-Object FullName)",
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\"; $env:PATH = \"$env:JAVA_HOME\\\\bin;$env:PATH\"; Set-Location \"C:\\\\Users\\\\RLRC\\\\Desktop\\\\Vibe_Coding\\\\Alarm\\\\android\"; .\\\\gradlew.bat bundleRelease 2>&1)"
     ]
   }
 }

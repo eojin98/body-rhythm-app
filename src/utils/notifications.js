@@ -2,6 +2,7 @@ import { Capacitor, registerPlugin } from '@capacitor/core'
 import { LocalNotifications } from '@capacitor/local-notifications'
 import { wasNotifFired, markNotifFired, getSettings } from './storage'
 import { ALARM_PERIODS, TEST_HOURLY_BEHAVIORS } from './alarmContent'
+import { scheduleBoostAlarms, cancelBoostAlarms } from './boostAlarm'
 
 const isNative = () => Capacitor.isNativePlatform()
 
@@ -331,6 +332,7 @@ export async function scheduleTestHourlyNotifications(hourlyAlarmSettings = {}) 
     if (!behavior) continue
     const hourSetting = hourlyAlarmSettings[hk] ?? { enabled: true }
     if (!hourSetting.enabled) continue
+    if (hourSetting.boostMode) continue // boost-mode hours are handled by BoostAlarmService
     const dh = h === 0 ? 12 : h > 12 ? h - 12 : h
     const period = h < 12 ? '오전' : '오후'
     notifications.push({
@@ -373,8 +375,10 @@ export async function syncAllAlarmNotifications(alarms, testMode = false) {
   }
   if (testMode) {
     await scheduleTestHourlyNotifications(settings.hourlyAlarmSettings ?? {})
+    await scheduleBoostAlarms(settings.hourlyAlarmSettings ?? {})
   } else {
     await cancelTestHourlyNotifications()
+    await cancelBoostAlarms()
   }
 }
 

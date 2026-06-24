@@ -12,6 +12,7 @@ import {
   scheduleSnoozeNotification,
   scheduleTestSnoozeNotification,
 } from './utils/notifications'
+import { syncPendingBoostActions } from './utils/boostAlarm'
 import { TEST_HOURLY_BEHAVIORS } from './utils/alarmContent'
 import Onboarding from './pages/Onboarding'
 import Home from './pages/Home'
@@ -39,6 +40,9 @@ function AppContent() {
       initNotificationChannels()
         .then(() => registerNotificationActionTypes())
         .then(() => syncAllAlarmNotifications(s.alarms, s.testMode))
+
+      // Sync any done/skipped actions recorded by BoostAlarmActivity while app was dead
+      syncPendingBoostActions()
 
       // Handle notification action buttons (완료 / 나중에 / 건너뜀)
       const removeActionListener = initNotificationActionListener(
@@ -73,6 +77,7 @@ function AppContent() {
         if (document.visibilityState === 'visible') {
           const settings = getSettings()
           syncAllAlarmNotifications(settings.alarms, settings.testMode)
+          syncPendingBoostActions() // pick up done/skipped actions from BoostAlarmActivity
         }
       }
       document.addEventListener('visibilitychange', handleVisibilityChange)
