@@ -29,6 +29,20 @@ export async function cancelBoostAlarms() {
   try { await BoostAlarm.cancelAll() } catch {}
 }
 
+/**
+ * Fires a one-shot test boost alarm N ms from now (default 5 s).
+ * Use this from the Settings dev button to verify the fullscreen alarm chain works.
+ */
+export async function scheduleTestBoostAlarm(delayMs = 5000) {
+  if (!isNative()) return
+  try {
+    await BoostAlarm.scheduleTestAlarm({ delayMs })
+  } catch (e) {
+    console.warn('[boostAlarm] scheduleTestAlarm error:', e)
+    throw e
+  }
+}
+
 // ─── Pending action sync ──────────────────────────────────────────────────────
 
 /**

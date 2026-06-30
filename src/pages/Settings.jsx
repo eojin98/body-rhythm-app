@@ -17,6 +17,11 @@ import {
   canScheduleExactAlarms,
   openExactAlarmSettings,
 } from '../utils/batteryOpt'
+import {
+  checkFullScreenIntentPermission,
+  openFullScreenIntentSettings,
+  scheduleTestBoostAlarm,
+} from '../utils/boostAlarm'
 import { ALARM_PERIODS, PERIOD_ORDER, getEffectiveBehaviors } from '../utils/alarmContent'
 
 export default function Settings() {
@@ -26,6 +31,8 @@ export default function Settings() {
   const [importMsg, setImportMsg] = useState(null)
   const [batteryIgnored, setBatteryIgnored] = useState(true)
   const [exactAlarmOk, setExactAlarmOk] = useState(true)
+  const [fsiGranted, setFsiGranted] = useState(true)
+  const [testAlarmFiring, setTestAlarmFiring] = useState(false)
   const fileInputRef = useRef(null)
 
   useEffect(() => {
@@ -33,6 +40,7 @@ export default function Settings() {
     if (Capacitor.isNativePlatform()) {
       isBatteryOptIgnored().then(setBatteryIgnored)
       canScheduleExactAlarms().then(setExactAlarmOk)
+      checkFullScreenIntentPermission().then(({ granted }) => setFsiGranted(granted))
     }
   }, [])
 
@@ -161,7 +169,7 @@ export default function Settings() {
         <div className="section">
           <div className="section-title">알람 정확도</div>
           <div className="card card-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {batteryIgnored && exactAlarmOk ? (
+            {batteryIgnored && exactAlarmOk && (fsiGranted || !settings.testMode) ? (
               <div style={{ fontSize: 13, color: '#00B894', fontWeight: 600 }}>✅ 모든 권한 설정 완료 — 알람이 정확하게 울립니다</div>
             ) : (
               <>
@@ -201,6 +209,28 @@ export default function Settings() {
                       onClick={async () => {
                         await openExactAlarmSettings()
                         setTimeout(() => canScheduleExactAlarms().then(setExactAlarmOk), 1500)
+                      }}
+                      style={{
+                        background: '#6C5CE7', color: 'white', border: 'none',
+                        borderRadius: 10, padding: '8px 14px', fontSize: 13,
+                        fontWeight: 600, cursor: 'pointer', flexShrink: 0,
+                      }}
+                    >
+                      허용하기
+                    </button>
+                  </div>
+                )}
+
+                {settings.testMode && !fsiGranted && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0' }}>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600 }}>전체화면 알람 권한</div>
+                      <div style={{ fontSize: 12, color: '#FF7675', marginTop: 2 }}>미설정 — Android 14+에서 강화모드 잠금화면 팝업 차단됨</div>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        await openFullScreenIntentSettings()
+                        setTimeout(() => checkFullScreenIntentPermission().then(({ granted }) => setFsiGranted(granted)), 1500)
                       }}
                       style={{
                         background: '#6C5CE7', color: 'white', border: 'none',
@@ -304,6 +334,35 @@ export default function Settings() {
             <div style={{ marginTop: 10, padding: '8px 12px', background: '#FFF8E6', borderRadius: 8, fontSize: 12, color: '#7A5800', lineHeight: 1.5 }}>
               ⚠️ 앱이 열려 있을 때 매 정시마다 팝업과 알림이 표시됩니다.
             </div>
+          )}
+          {settings.testMode && Capacitor.isNativePlatform() && (
+            <button
+              onClick={async () => {
+                if (testAlarmFiring) return
+                setTestAlarmFiring(true)
+                try {
+                  await scheduleTestBoostAlarm(5000)
+                  setTimeout(() => setTestAlarmFiring(false), 6000)
+                } catch (e) {
+                  alert('테스트 알람 예약 실패: ' + (e?.message || e))
+                  setTestAlarmFiring(false)
+                }
+              }}
+              style={{
+                marginTop: 10,
+                width: '100%',
+                background: testAlarmFiring ? '#B09FE8' : '#6C5CE7',
+                color: 'white',
+                border: 'none',
+                borderRadius: 12,
+                padding: '12px',
+                fontSize: 14,
+                fontWeight: 700,
+                cursor: testAlarmFiring ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {testAlarmFiring ? '⏱️ 5초 후 강화 알람 발사 중...' : '🔥 강화모드 테스트 (5초 후 알람)'}
+            </button>
           )}
         </div>
       </div>
