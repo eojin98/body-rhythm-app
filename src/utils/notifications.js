@@ -37,9 +37,10 @@ async function resolveChannelId(soundMode) {
 }
 
 // ─── Notification Channels (Android 8+) ──────────────────────────────────────
+// 채널은 한 번 생성되면 Android가 설정을 캐시하므로 중요 속성 변경 시 채널 ID를 바꿔야 함
 // v2: alarm_vibrate importance 5→4, alarm_silent importance 3→2
-// 채널은 한 번 생성되면 Android가 설정을 캐시하므로 importance 변경 시 ID도 변경해야 함
-const CHANNEL_SOUND   = 'alarm_sound'
+// alarm_sound_v2: 'alarm_sound' 채널이 일부 기기에서 소리 없이 캐시되는 버그 수정용 신규 채널
+const CHANNEL_SOUND   = 'alarm_sound_v2'
 const CHANNEL_VIBRATE = 'alarm_vibrate_v2'
 const CHANNEL_SILENT  = 'alarm_silent_v2'
 
@@ -47,7 +48,7 @@ export async function initNotificationChannels() {
   if (!isNative()) return
   try {
     await LocalNotifications.createChannel({
-      id: CHANNEL_SOUND,
+      id: CHANNEL_SOUND,       // 'alarm_sound_v2'
       name: '알람 (소리 + 진동)',
       description: '소리와 진동으로 알람을 알립니다',
       importance: 5,
@@ -55,6 +56,7 @@ export async function initNotificationChannels() {
       lights: true,
       lightColor: '#6C5CE7',
       visibility: 1,
+      // sound 미지정 → 시스템 기본 알림음 사용 (벨소리 모드 따름)
     })
     await LocalNotifications.createChannel({
       id: CHANNEL_VIBRATE,   // 'alarm_vibrate_v2'

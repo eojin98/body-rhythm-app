@@ -12,7 +12,8 @@
       "PowerShell(Get-ChildItem -Recurse -Path \"C:\\\\Users\\\\RLRC\\\\Desktop\\\\Vibe_Coding\\\\Alarm\\\\android\" -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match \"plugin|capacitor\" } | Select-Object FullName)",
       "PowerShell($env:JAVA_HOME = \"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\"; $env:PATH = \"$env:JAVA_HOME\\\\bin;$env:PATH\"; Set-Location \"C:\\\\Users\\\\RLRC\\\\Desktop\\\\Vibe_Coding\\\\Alarm\\\\android\"; .\\\\gradlew.bat bundleRelease 2>&1)",
       "PowerShell($javaCmd = Get-Command java -ErrorAction SilentlyContinue; if \\($javaCmd\\) { $javaCmd.Source } else { \"not found\" }; Get-ChildItem \"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\" -ErrorAction SilentlyContinue | Select-Object Name -First 1)",
-      "PowerShell($env:JAVA_HOME = \"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\"; cd \"C:\\\\Users\\\\RLRC\\\\Desktop\\\\Vibe_Coding\\\\Alarm\\\\android\"; .\\\\gradlew assembleDebug 2>&1 | Select-Object -Last 20)"
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\"; cd \"C:\\\\Users\\\\RLRC\\\\Desktop\\\\Vibe_Coding\\\\Alarm\\\\android\"; .\\\\gradlew assembleDebug 2>&1 | Select-Object -Last 20)",
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\"; cd \"C:\\\\Users\\\\RLRC\\\\Desktop\\\\Vibe_Coding\\\\Alarm\\\\android\"; .\\\\gradlew assembleDebug 2>&1 | Select-Object -Last 10)"
     ]
   }
 }
