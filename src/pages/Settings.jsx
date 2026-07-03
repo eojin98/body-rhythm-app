@@ -250,14 +250,29 @@ export default function Settings() {
 
       {/* Alarm sound mode */}
       <div className="section">
-        <div className="section-title">알람 소리</div>
+        <div className="section-title">알람 소리 모드</div>
         <div className="card card-body">
           {[
-            { value: 'sound',   label: '소리 + 진동', icon: '🔔' },
-            { value: 'vibrate', label: '진동만',       icon: '📳' },
-            { value: 'silent',  label: '무음',         icon: '🔕' },
+            {
+              value: 'system',
+              label: '시스템 설정에 따라',
+              icon: '📱',
+              desc: '매너모드면 진동, 무음이면 무음으로 자동 조절',
+            },
+            {
+              value: 'sound',
+              label: '항상 소리',
+              icon: '🔊',
+              desc: '매너모드와 무관하게 항상 소리 + 진동',
+            },
+            {
+              value: 'vibrate',
+              label: '항상 진동',
+              icon: '📳',
+              desc: '매너모드와 무관하게 항상 진동만 (소리 없음)',
+            },
           ].map(opt => {
-            const active = (settings.alarmSoundMode ?? 'sound') === opt.value
+            const active = (settings.alarmSoundMode ?? 'system') === opt.value
             return (
               <button
                 key={opt.value}
@@ -276,16 +291,21 @@ export default function Settings() {
                 }}
               >
                 <span style={{ fontSize: 22 }}>{opt.icon}</span>
-                <span style={{ fontSize: 15, fontWeight: active ? 700 : 500, color: active ? '#6C5CE7' : '#1E1E2E' }}>
-                  {opt.label}
-                </span>
-                {active && <span style={{ marginLeft: 'auto', color: '#6C5CE7', fontSize: 18 }}>✓</span>}
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 15, fontWeight: active ? 700 : 500, color: active ? '#6C5CE7' : '#1E1E2E' }}>
+                    {opt.label}
+                  </div>
+                  <div style={{ fontSize: 12, color: active ? '#9B8FE4' : '#A0A0B8', marginTop: 2 }}>
+                    {opt.desc}
+                  </div>
+                </div>
+                {active && <span style={{ color: '#6C5CE7', fontSize: 18, flexShrink: 0 }}>✓</span>}
               </button>
             )
           })}
           {Capacitor.isNativePlatform() && (
             <div style={{ fontSize: 12, color: '#A0A0B8', marginTop: 4, lineHeight: 1.5 }}>
-              * 채널별 소리/진동은 기기 설정 &gt; 앱 &gt; 알림에서도 조정할 수 있습니다.
+              * 강화모드 알람은 이 설정과 무관하게 별도 동작합니다.
             </div>
           )}
         </div>

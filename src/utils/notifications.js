@@ -9,17 +9,6 @@ const isNative = () => Capacitor.isNativePlatform()
 // Native plugin to check device ringer mode (Android only)
 const DeviceRinger = registerPlugin('DeviceRinger')
 
-// Returns true when device ringer mode is SILENT(0) or VIBRATE(1) — i.e., not NORMAL(2)
-async function isDeviceSilent() {
-  if (!isNative()) return false
-  try {
-    const { isSilent } = await DeviceRinger.getRingerMode()
-    return isSilent === true
-  } catch {
-    return false
-  }
-}
-
 // Listen for ringer mode changes from the native plugin.
 // callback() is invoked whenever the mode transitions (e.g. normal → vibrate).
 // Returns a cleanup function to remove the listener.
@@ -29,11 +18,29 @@ export function addRingerModeListener(callback) {
   return () => handle.then(h => h.remove()).catch(() => {})
 }
 
-// Resolve the effective channel: always CHANNEL_SILENT when device is in silent mode
+/**
+ * Resolves the notification channel for the current alarmSoundMode setting:
+ *   'sound'   → CHANNEL_SOUND   (always plays sound, ignores ringer mode)
+ *   'vibrate' → CHANNEL_VIBRATE (always vibrates only, ignores ringer mode)
+ *   'system'  → follows device ringer:
+ *                 RINGER_MODE_NORMAL  (2) → CHANNEL_SOUND
+ *                 RINGER_MODE_VIBRATE (1) → CHANNEL_VIBRATE
+ *                 RINGER_MODE_SILENT  (0) → CHANNEL_SILENT
+ * Any unrecognised value falls through to 'system' behaviour.
+ */
 async function resolveChannelId(soundMode) {
-  const silent = await isDeviceSilent()
-  if (silent) return CHANNEL_SILENT
-  return getChannelId(soundMode)
+  if (soundMode === 'sound')   return CHANNEL_SOUND
+  if (soundMode === 'vibrate') return CHANNEL_VIBRATE
+  // 'system' or legacy value — follow device ringer mode
+  if (!isNative()) return CHANNEL_SOUND
+  try {
+    const { mode } = await DeviceRinger.getRingerMode()
+    if (mode === 0) return CHANNEL_SILENT   // RINGER_MODE_SILENT
+    if (mode === 1) return CHANNEL_VIBRATE  // RINGER_MODE_VIBRATE
+    return CHANNEL_SOUND                   // RINGER_MODE_NORMAL (2)
+  } catch {
+    return CHANNEL_SOUND
+  }
 }
 
 // ─── Notification Channels (Android 8+) ──────────────────────────────────────
@@ -86,12 +93,6 @@ export async function initNotificationChannels() {
   } catch (e) {
     console.warn('Channel creation failed:', e)
   }
-}
-
-function getChannelId(soundMode) {
-  if (soundMode === 'vibrate') return CHANNEL_VIBRATE
-  if (soundMode === 'silent') return CHANNEL_SILENT
-  return CHANNEL_SOUND
 }
 
 // Capacitor weekday: 1=Sun, 2=Mon, ..., 7=Sat
@@ -218,7 +219,7 @@ export async function scheduleAlarmNotifications(alarm, soundMode) {
   await cancelAlarmNotifications(alarm.id, [0, 1, 2, 3, 4, 5, 6])
   if (!alarm.enabled || alarm.days.length === 0) return
 
-  const mode = soundMode ?? getSettings().alarmSoundMode ?? 'sound'
+  const mode = soundMode ?? getSettings().alarmSoundMode ?? 'system'
   const channelId = await resolveChannelId(mode)
   const [hour, minute] = alarm.time.split(':').map(Number)
   const { title, body } = buildNotifContent(alarm)
@@ -246,7 +247,7 @@ export async function scheduleSnoozeNotification(alarm, snoozeMins = 30) {
   if (!isNative()) return
   const { title, body } = buildNotifContent(alarm)
   const snoozeId = toNotifId(alarm.id, 8) // slot 8 = snooze
-  const channelId = await resolveChannelId(getSettings().alarmSoundMode ?? 'sound')
+  const channelId = await resolveChannelId(getSettings().alarmSoundMode ?? 'system')
   try {
     await LocalNotifications.cancel({ notifications: [{ id: snoozeId }] })
   } catch {}
@@ -277,7 +278,7 @@ export async function scheduleTestSnoozeNotification(hk, behavior, snoozeMins = 
   const h = parseInt(hk, 10)
   const dh = h === 0 ? 12 : h > 12 ? h - 12 : h
   const period = h < 12 ? '오전' : '오후'
-  const channelId = await resolveChannelId(getSettings().alarmSoundMode ?? 'sound')
+  const channelId = await resolveChannelId(getSettings().alarmSoundMode ?? 'system')
   try {
     await LocalNotifications.cancel({ notifications: [{ id: TEST_SNOOZE_NOTIF_ID }] })
   } catch {}
@@ -326,7 +327,7 @@ const TEST_HOURLY_NOTIF_BASE_ID = 9000
 export async function scheduleTestHourlyNotifications(hourlyAlarmSettings = {}) {
   if (!isNative()) return
   await cancelTestHourlyNotifications()
-  const channelId = await resolveChannelId(getSettings().alarmSoundMode ?? 'sound')
+  const channelId = await resolveChannelId(getSettings().alarmSoundMode ?? 'system')
   const notifications = []
   for (let h = 7; h <= 23; h++) {
     const hk = String(h).padStart(2, '0')
