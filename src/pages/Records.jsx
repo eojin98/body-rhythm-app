@@ -380,7 +380,7 @@ function StatsSegment({ records }) {
           <div style={{ fontSize: 13, fontWeight: 600, color: '#6E6E8A', marginBottom: 16 }}>주간 실천 현황</div>
           <WeeklyRoutineChart data={weekData} color={period.color} gradient={period.gradient} />
           <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 14 }}>
-            {[['#00B894', '완료'], ['#FDCB6E', '건너뜀'], ['#EEE', '기록 없음']].map(([c, l]) => (
+            {[['#00B894', '완료'], ['#9090B0', '건너뜀'], ['#EEE', '기록 없음']].map(([c, l]) => (
               <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                 <div style={{ width: 10, height: 10, borderRadius: 3, background: c }} />
                 <span style={{ fontSize: 11, color: '#A0A0B8' }}>{l}</span>
@@ -392,7 +392,7 @@ function StatsSegment({ records }) {
         {/* 완료 / 건너뜀 / 기록없음 카운트 */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 12 }}>
           <StatCard value={`${doneCount}일`} label="완료" color="#00B894" bg="#E6FBF5" />
-          <StatCard value={`${skippedCount}일`} label="건너뜀" color="#FDCB6E" bg="#FFF8E6" />
+          <StatCard value={`${skippedCount}일`} label="건너뜀" color="#9090B0" bg="#F0F0F5" />
           <StatCard value={`${7 - doneCount - skippedCount}일`} label="기록 없음" color="#A0A0B8" bg="#F5F5F5" />
         </div>
 
@@ -443,7 +443,7 @@ function WeeklyRoutineChart({ data, color, gradient }) {
         const bg = d.status === 'done'
           ? gradient
           : d.status === 'skipped'
-            ? 'linear-gradient(135deg, #FDCB6E, #F0A030)'
+            ? 'linear-gradient(135deg, #B0B0C8, #9090A8)'
             : '#EEE'
         const textColor = d.status === 'done' ? 'white' : d.status === 'skipped' ? 'white' : '#CCC'
         return (
@@ -892,7 +892,7 @@ function RecordDetail({ record, dateKey, onUpdate }) {
           <div style={{ display: 'flex', gap: 8 }}>
             {[
               { label: '완료', count: doneCount, color: '#00B894', bg: '#E6FBF5' },
-              { label: '건너뜀', count: skippedCount, color: '#E67E22', bg: '#FFF8E6' },
+              { label: '건너뜀', count: skippedCount, color: '#9090B0', bg: '#F0F0F5' },
               { label: '미실행', count: missedCount, color: '#FF7675', bg: '#FFF0F0' },
             ].map(({ label, count, color, bg }) => (
               <div key={label} style={{ flex: 1, textAlign: 'center', padding: '10px 4px', borderRadius: 10, background: bg }}>
@@ -1039,7 +1039,7 @@ function RecordDetail({ record, dateKey, onUpdate }) {
 function RoutineRow({ icon, iconGradient, label, sublabel, status, isEditing, onEdit, onSave, onCancel }) {
   const cfg = {
     done:    { bg: '#E6FBF5', color: '#00B894', text: '✅ 완료' },
-    skipped: { bg: '#FFF8E6', color: '#E67E22', text: '⏭ 건너뜀' },
+    skipped: { bg: '#F0F0F5', color: '#9090B0', text: '✕ 건너뜀' },
     missed:  { bg: '#FFF0F0', color: '#FF7675', text: '❌ 미실행' },
   }[status] || { bg: '#F5F5F5', color: '#C0C0D0', text: '— 기록 없음' }
 
@@ -1070,7 +1070,7 @@ function RoutineRow({ icon, iconGradient, label, sublabel, status, isEditing, on
       ) : (
         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
           <button className="btn btn-primary btn-sm" style={{ padding: '4px 8px', fontSize: 11 }} onClick={() => onSave('done')}>완료</button>
-          <button className="btn btn-ghost btn-sm" style={{ padding: '4px 8px', fontSize: 11, background: '#FFF8E6', color: '#E67E22' }} onClick={() => onSave('skipped')}>건너뜀</button>
+          <button className="btn btn-ghost btn-sm" style={{ padding: '4px 8px', fontSize: 11, background: '#F0F0F5', color: '#9090B0' }} onClick={() => onSave('skipped')}>건너뜀</button>
           {status && <button className="btn btn-ghost btn-sm" style={{ padding: '4px 8px', fontSize: 11 }} onClick={() => onSave(null)}>삭제</button>}
           <button className="btn btn-ghost btn-sm" style={{ padding: '4px 8px', fontSize: 11 }} onClick={onCancel}>취소</button>
         </div>
