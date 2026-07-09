@@ -1,6 +1,7 @@
-import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
-import { useEffect, useState } from 'react'
+import { HashRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
 import { Capacitor } from '@capacitor/core'
+import { App as CapApp } from '@capacitor/app'
 import { getSettings, getTodayKey, saveRoutineAction, setSnooze } from './utils/storage'
 import {
   checkAndFireAlarms,
@@ -26,11 +27,44 @@ import HourlyAlarmEdit from './pages/HourlyAlarmEdit'
 import BottomNav from './components/BottomNav'
 
 function AppContent() {
-  const location = useLocation()
+  const navigate  = useNavigate()
+  const location  = useLocation()
   const [onboardingDone, setOnboardingDone] = useState(() => {
     return getSettings().onboardingComplete || false
   })
+  const [exitConfirmVisible, setExitConfirmVisible] = useState(false)
 
+  // Refs so the back-button listener always reads the latest values
+  // without needing to re-register on every render.
+  const exitConfirmRef = useRef(false)
+  const pathnameRef    = useRef(location.pathname)
+
+  useEffect(() => { exitConfirmRef.current = exitConfirmVisible }, [exitConfirmVisible])
+  useEffect(() => { pathnameRef.current    = location.pathname  }, [location.pathname])
+
+  // ─── Hardware back button (Android) ────────────────────────────────────────
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return
+
+    const subscription = CapApp.addListener('backButton', () => {
+      if (exitConfirmRef.current) {
+        // Popup is showing — close it instead of exiting
+        setExitConfirmVisible(false)
+        return
+      }
+      if (pathnameRef.current === '/') {
+        // Home (top-level) — ask for exit confirmation
+        setExitConfirmVisible(true)
+      } else {
+        // Sub-page — go back
+        navigate(-1)
+      }
+    })
+
+    return () => { subscription.then(handle => handle.remove()) }
+  }, [navigate])
+
+  // ─── Alarm / notification setup ─────────────────────────────────────────────
   useEffect(() => {
     const s = getSettings()
     if (!s.onboardingComplete) return
@@ -72,12 +106,11 @@ function AppContent() {
       })
 
       // 앱이 백그라운드에서 포그라운드로 복귀할 때 재스케줄
-      // (백그라운드 중에 ringer mode 가 바뀐 경우 대비)
       const handleVisibilityChange = () => {
         if (document.visibilityState === 'visible') {
           const settings = getSettings()
           syncAllAlarmNotifications(settings.alarms, settings.testMode)
-          syncPendingBoostActions() // pick up done/skipped actions from BoostAlarmActivity
+          syncPendingBoostActions()
         }
       }
       document.addEventListener('visibilitychange', handleVisibilityChange)
@@ -123,6 +156,65 @@ function AppContent() {
         </Routes>
       </div>
       {location.pathname !== '/checkin' && location.pathname !== '/circadian-detail' && location.pathname !== '/hourly-alarm-edit' && <BottomNav />}
+
+      {/* ─── 앱 종료 확인 팝업 ─────────────────────────────────────────── */}
+      {exitConfirmVisible && (
+        <div
+          onClick={() => setExitConfirmVisible(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 9999,
+            background: 'rgba(10, 10, 30, 0.60)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '0 32px',
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: '#FFFFFF',
+              borderRadius: 24,
+              padding: '32px 24px 24px',
+              width: '100%',
+              maxWidth: 300,
+              textAlign: 'center',
+              boxShadow: '0 12px 40px rgba(108, 92, 231, 0.20)',
+            }}
+          >
+            <div style={{ fontSize: 40, marginBottom: 14 }}>🚪</div>
+            <div style={{ fontSize: 17, fontWeight: 700, color: '#1A1A2E', marginBottom: 8 }}>
+              앱을 종료하시겠어요?
+            </div>
+            <div style={{ fontSize: 13, color: '#A0A0B8', lineHeight: 1.6, marginBottom: 26 }}>
+              종료 후 알람은 계속 동작합니다.
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => setExitConfirmVisible(false)}
+                style={{
+                  flex: 1, padding: '13px 0', borderRadius: 14,
+                  border: '1.5px solid #E0DEFF',
+                  background: '#F5F4FF', color: '#6C5CE7',
+                  fontSize: 15, fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                취소
+              </button>
+              <button
+                onClick={() => CapApp.exitApp()}
+                style={{
+                  flex: 1, padding: '13px 0', borderRadius: 14,
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #6C5CE7, #A29BFE)',
+                  color: '#FFFFFF',
+                  fontSize: 15, fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                종료
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
