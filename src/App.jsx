@@ -46,17 +46,17 @@ function AppContent() {
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return
 
-    const subscription = CapApp.addListener('backButton', () => {
+    const subscription = CapApp.addListener('backButton', ({ canGoBack }) => {
       if (exitConfirmRef.current) {
         // Popup is showing — close it instead of exiting
         setExitConfirmVisible(false)
         return
       }
-      if (pathnameRef.current === '/') {
-        // Home (top-level) — ask for exit confirmation
+      if (pathnameRef.current === '/' || !canGoBack) {
+        // Home page, or history fully exhausted — ask for exit confirmation
         setExitConfirmVisible(true)
       } else {
-        // Sub-page — go back
+        // Sub-page with history available — go back
         navigate(-1)
       }
     })
