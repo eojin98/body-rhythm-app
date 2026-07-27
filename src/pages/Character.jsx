@@ -5,6 +5,9 @@ import {
   getConditionScore, getCondition, getEvolutionStage, getEvolutionProgress,
   getAcknowledgedStage, setAcknowledgedStage,
 } from '../utils/characterLogic'
+import {
+  getTotalPoints, getTodayPoints, getRecentEntries, getAllEntries,
+} from '../utils/pointLedger'
 
 export default function Character() {
   const [records] = useState(() => getRecords())
@@ -13,6 +16,7 @@ export default function Character() {
   const [nameInput, setNameInput] = useState('')
   const [showEvolveAnim, setShowEvolveAnim] = useState(false)
   const [evolvedStage, setEvolvedStage] = useState(null)
+  const [showAllEntries, setShowAllEntries] = useState(false)
 
   const characterName = settings.characterName || '바디'
   const totalDone = getTotalDone(records)
@@ -23,6 +27,10 @@ export default function Character() {
   const condition = getCondition(conditionScore)
   const stage = getEvolutionStage(totalDone)
   const evo = getEvolutionProgress(totalDone)
+
+  const totalPts  = getTotalPoints()
+  const todayPts  = getTodayPoints()
+  const entries   = showAllEntries ? getAllEntries() : getRecentEntries(10)
 
   useEffect(() => {
     const lastStage = getAcknowledgedStage()
@@ -132,6 +140,29 @@ export default function Character() {
         </div>
       </div>
 
+      {/* ── 보유 포인트 카드 ── */}
+      <div className="section" style={{ paddingTop: 0 }}>
+        <div className="card" style={{ padding: '18px 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ fontSize: 12, color: '#A0A0B8', marginBottom: 4 }}>보유 포인트</div>
+              <div style={{ fontSize: 32, fontWeight: 800, color: '#6C5CE7', lineHeight: 1 }}>
+                {totalPts.toLocaleString()}<span style={{ fontSize: 16, fontWeight: 600, marginLeft: 3 }}>P</span>
+              </div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: 12, color: '#A0A0B8', marginBottom: 4 }}>오늘 획득</div>
+              <div style={{
+                fontSize: 18, fontWeight: 700,
+                color: todayPts > 0 ? '#00B894' : '#C0C0D0',
+              }}>
+                {todayPts > 0 ? `+${todayPts}P` : '0P'}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* ── Condition card ── */}
       <div className="section" style={{ paddingTop: 0 }}>
         <div className="card" style={{ padding: '18px 20px' }}>
@@ -202,6 +233,81 @@ export default function Character() {
           ))}
         </div>
       </div>
+
+      {/* ── 포인트 내역 ── */}
+      <div className="section" style={{ paddingTop: 0, paddingBottom: 24 }}>
+        <div className="section-title">포인트 내역</div>
+        <div className="card">
+          {entries.length === 0 ? (
+            <div style={{ padding: '28px 20px', textAlign: 'center', color: '#A0A0B8', fontSize: 14 }}>
+              아직 적립된 포인트가 없어요
+            </div>
+          ) : (
+            <>
+              {entries.map((entry, i) => (
+                <div
+                  key={entry.id}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '11px 16px',
+                    borderBottom: i < entries.length - 1 ? '1px solid #F0EFF8' : 'none',
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontSize: 13, fontWeight: 600, color: '#1E1E2E',
+                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                    }}>
+                      {entry.alarmLabel}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#A0A0B8', marginTop: 2 }}>
+                      {fmtEntryDate(entry.date)} {entry.time}
+                    </div>
+                  </div>
+                  <div style={{
+                    fontSize: 14, fontWeight: 700, flexShrink: 0, marginLeft: 12,
+                    color: entry.points > 0 ? '#6C5CE7' : '#C0C0D0',
+                  }}>
+                    {entry.points > 0 ? `+${entry.points}P` : '0P'}
+                  </div>
+                </div>
+              ))}
+
+              {/* 더 보기 / 접기 */}
+              {!showAllEntries && getAllEntries().length > 10 && (
+                <button
+                  onClick={() => setShowAllEntries(true)}
+                  style={{
+                    width: '100%', padding: '12px', border: 'none', borderTop: '1px solid #F0EFF8',
+                    background: 'transparent', color: '#6C5CE7', fontSize: 13, fontWeight: 600,
+                    cursor: 'pointer', fontFamily: 'inherit',
+                  }}
+                >
+                  더 보기 ({getAllEntries().length - 10}개 더)
+                </button>
+              )}
+              {showAllEntries && getAllEntries().length > 10 && (
+                <button
+                  onClick={() => setShowAllEntries(false)}
+                  style={{
+                    width: '100%', padding: '12px', border: 'none', borderTop: '1px solid #F0EFF8',
+                    background: 'transparent', color: '#A0A0B8', fontSize: 13,
+                    cursor: 'pointer', fontFamily: 'inherit',
+                  }}
+                >
+                  접기
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      </div>
     </div>
   )
+}
+
+function fmtEntryDate(dateStr) {
+  if (!dateStr) return ''
+  const [, m, d] = dateStr.split('-')
+  return `${Number(m)}/${Number(d)}`
 }

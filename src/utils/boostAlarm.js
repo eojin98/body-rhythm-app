@@ -1,5 +1,6 @@
 import { Capacitor, registerPlugin } from '@capacitor/core'
 import { saveRoutineAction } from './storage'
+import { recordPoint } from './pointLedger'
 
 const BoostAlarm = registerPlugin('BoostAlarm')
 const isNative = () => Capacitor.isNativePlatform()
@@ -59,6 +60,7 @@ export async function syncPendingBoostActions() {
     for (const { periodId, date, action } of list) {
       if (action === 'done' || action === 'skipped') {
         saveRoutineAction(date, periodId, action)
+        recordPoint({ date, alarmId: periodId, routineAction: action })
       }
     }
   } catch (e) {

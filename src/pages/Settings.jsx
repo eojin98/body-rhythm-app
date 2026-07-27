@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
 import { getSettings, saveSettings, DAY_NAMES, APP_VERSION, exportAllData, importAllData } from '../utils/storage'
+import { clearLedger } from '../utils/pointLedger'
 import {
   requestNotificationPermission,
   getPermissionStatus,
@@ -33,6 +34,7 @@ export default function Settings() {
   const [exactAlarmOk, setExactAlarmOk] = useState(true)
   const [fsiGranted, setFsiGranted] = useState(true)
   const [testAlarmFiring, setTestAlarmFiring] = useState(false)
+  const [showPointResetConfirm, setShowPointResetConfirm] = useState(false)
   const fileInputRef = useRef(null)
 
   useEffect(() => {
@@ -467,6 +469,49 @@ export default function Settings() {
               lineHeight: 1.5,
             }}>
               {importMsg.type === 'success' ? '✅' : '❌'} {importMsg.text}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* TODO: 배포 전 제거 — 개발용 도구 */}
+      <div className="section">
+        <div className="section-title">개발자 도구</div>
+        <div className="card card-body">
+          {!showPointResetConfirm ? (
+            <button
+              onClick={() => setShowPointResetConfirm(true)}
+              style={{
+                width: '100%', padding: '12px', borderRadius: 12, border: 'none',
+                background: '#FFF0F0', color: '#FF7675', fontWeight: 600,
+                fontSize: 14, cursor: 'pointer',
+              }}
+            >
+              🗑 포인트 원장 초기화
+            </button>
+          ) : (
+            <div>
+              <div style={{ fontSize: 13, color: '#666', marginBottom: 10, lineHeight: 1.5 }}>
+                포인트 내역이 전부 삭제됩니다. 되돌릴 수 없어요.
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={() => setShowPointResetConfirm(false)}
+                  style={{
+                    flex: 1, padding: '10px', borderRadius: 10, border: '1.5px solid #E0DEFF',
+                    background: '#F5F4FF', color: '#6C5CE7', fontWeight: 600,
+                    fontSize: 14, cursor: 'pointer',
+                  }}
+                >취소</button>
+                <button
+                  onClick={() => { clearLedger(); setShowPointResetConfirm(false) }}
+                  style={{
+                    flex: 1, padding: '10px', borderRadius: 10, border: 'none',
+                    background: '#FF7675', color: '#fff', fontWeight: 600,
+                    fontSize: 14, cursor: 'pointer',
+                  }}
+                >초기화</button>
+              </div>
             </div>
           )}
         </div>

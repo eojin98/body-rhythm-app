@@ -15,6 +15,7 @@ import {
 } from './utils/notifications'
 import { syncPendingBoostActions } from './utils/boostAlarm'
 import { TEST_HOURLY_BEHAVIORS } from './utils/alarmContent'
+import { recordPoint } from './utils/pointLedger'
 import Onboarding from './pages/Onboarding'
 import Home from './pages/Home'
 import MorningCheckin from './pages/MorningCheckin'
@@ -84,6 +85,7 @@ function AppContent() {
           const today = getTodayKey()
           if (action === 'done' || action === 'skipped') {
             saveRoutineAction(today, periodId, action)
+            recordPoint({ date: today, alarmId: periodId, routineAction: action })
           } else if (action === 'snooze') {
             setSnooze(periodId, Date.now() + snoozeMins * 60 * 1000)
             if (periodId.startsWith('test_')) {
