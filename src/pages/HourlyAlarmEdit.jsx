@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Capacitor } from '@capacitor/core'
 import { getSettings, saveSettings } from '../utils/storage'
 import { TEST_HOURLY_BEHAVIORS } from '../utils/alarmContent'
 import { syncAllAlarmNotifications } from '../utils/notifications'
+import { checkFullScreenIntentPermission, openFullScreenIntentSettings } from '../utils/boostAlarm'
 
 const HOURS = Object.keys(TEST_HOURLY_BEHAVIORS).sort()
 
@@ -17,8 +19,22 @@ function resolveHourlySettings(saved = {}) {
 export default function HourlyAlarmEdit() {
   const navigate = useNavigate()
   const [settings, setSettings] = useState(getSettings)
+  const [showFsiModal, setShowFsiModal] = useState(false)
 
   const hourlySettings = resolveHourlySettings(settings.hourlyAlarmSettings)
+
+  // Re-check FSI permission when returning from system settings
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        // No state to update — permission is checked on-demand at button click
+        // Just a hook for future use or to trigger re-render if needed
+      }
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [])
 
   const updateHour = (hk, patch) => {
     const currentEntry = { enabled: true, boostMode: false, ...settings.hourlyAlarmSettings?.[hk] }
@@ -42,6 +58,52 @@ export default function HourlyAlarmEdit() {
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)', paddingBottom: 32 }}>
+      {/* USE_FULL_SCREEN_INTENT permission guidance popup */}
+      {showFsiModal && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 1000,
+          background: 'rgba(0,0,0,0.55)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 24,
+        }}>
+          <div style={{
+            background: 'white', borderRadius: 20, padding: '28px 24px',
+            maxWidth: 340, width: '100%', boxShadow: '0 8px 40px rgba(0,0,0,0.2)',
+          }}>
+            <div style={{ fontSize: 28, textAlign: 'center', marginBottom: 12 }}>🔥</div>
+            <div style={{ fontSize: 17, fontWeight: 700, color: '#1E1E2E', textAlign: 'center', marginBottom: 12 }}>
+              강화모드를 사용하려면 추가 설정이 필요해요
+            </div>
+            <div style={{ fontSize: 14, color: '#6E6E8A', lineHeight: 1.6, textAlign: 'center', marginBottom: 24 }}>
+              강화모드는 잠금화면 위에서도 알람을 표시해요.{' '}
+              기기 설정에서{' '}
+              <strong style={{ color: '#1E1E2E' }}>'전체 화면 알림'</strong>{' '}
+              권한을 허용해주세요.
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => setShowFsiModal(false)}
+                style={{
+                  flex: 1, padding: '12px', borderRadius: 12,
+                  border: '1.5px solid #E0DEFF', background: '#F5F4FF',
+                  color: '#6C5CE7', fontWeight: 600, fontSize: 14, cursor: 'pointer',
+                }}
+              >취소</button>
+              <button
+                onClick={async () => {
+                  setShowFsiModal(false)
+                  await openFullScreenIntentSettings()
+                }}
+                style={{
+                  flex: 1, padding: '12px', borderRadius: 12,
+                  border: 'none', background: '#6C5CE7',
+                  color: 'white', fontWeight: 600, fontSize: 14, cursor: 'pointer',
+                }}
+              >설정으로 이동</button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div style={{
         background: 'linear-gradient(135deg, var(--primary) 0%, #a29bfe 100%)',
@@ -163,7 +225,15 @@ export default function HourlyAlarmEdit() {
 
                 {/* Boost mode button */}
                 <button
-                  onClick={() => hs.enabled && updateHour(hk, { boostMode: !hs.boostMode })}
+                  onClick={async () => {
+                    if (!hs.enabled) return
+                    // Turning ON → check USE_FULL_SCREEN_INTENT on Android 14+
+                    if (!hs.boostMode && Capacitor.isNativePlatform()) {
+                      const { granted } = await checkFullScreenIntentPermission()
+                      if (!granted) { setShowFsiModal(true); return }
+                    }
+                    updateHour(hk, { boostMode: !hs.boostMode })
+                  }}
                   style={{
                     background: hs.boostMode && hs.enabled ? '#FFF3E0' : '#F5F4FF',
                     border: hs.boostMode && hs.enabled ? '1.5px solid #F39C12' : '1.5px solid var(--border)',

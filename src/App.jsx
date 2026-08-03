@@ -85,7 +85,7 @@ function AppContent() {
           const today = getTodayKey()
           if (action === 'done' || action === 'skipped') {
             saveRoutineAction(today, periodId, action)
-            recordPoint({ date: today, alarmId: periodId, routineAction: action })
+            recordPoint({ date: today, alarmId: periodId, action: action === 'done' ? 'normal_complete' : 'skip' })
           } else if (action === 'snooze') {
             setSnooze(periodId, Date.now() + snoozeMins * 60 * 1000)
             if (periodId.startsWith('test_')) {
@@ -117,10 +117,17 @@ function AppContent() {
       }
       document.addEventListener('visibilitychange', handleVisibilityChange)
 
+      // Capacitor appStateChange: BoostAlarmActivity → MainActivity 전환 시
+      // visibilitychange가 발화하지 않는 경우를 위한 이중 안전장치
+      const appStateHandle = CapApp.addListener('appStateChange', ({ isActive }) => {
+        if (isActive) syncPendingBoostActions()
+      })
+
       return () => {
         removeActionListener()
         removeRingerListener()
         document.removeEventListener('visibilitychange', handleVisibilityChange)
+        appStateHandle.then(h => h.remove())
       }
     } else {
       // Web/PWA: poll every 10 seconds to fire alarms at the right minute

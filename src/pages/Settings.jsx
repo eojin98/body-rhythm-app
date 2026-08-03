@@ -4,12 +4,10 @@ import { Capacitor } from '@capacitor/core'
 import { getSettings, saveSettings, DAY_NAMES, APP_VERSION, exportAllData, importAllData } from '../utils/storage'
 import { clearLedger } from '../utils/pointLedger'
 import {
-  requestNotificationPermission,
   getPermissionStatus,
   checkPermissionStatusAsync,
   scheduleAlarmNotifications,
   syncAllAlarmNotifications,
-  cancelAllAlarmNotifications,
   initNotificationChannels,
 } from '../utils/notifications'
 import {
@@ -21,6 +19,7 @@ import {
 import {
   checkFullScreenIntentPermission,
   openFullScreenIntentSettings,
+  openAppNotificationSettings,
   scheduleTestBoostAlarm,
 } from '../utils/boostAlarm'
 import { ALARM_PERIODS, PERIOD_ORDER, getEffectiveBehaviors } from '../utils/alarmContent'
@@ -46,6 +45,19 @@ export default function Settings() {
     }
   }, [])
 
+  // Re-check OS notification permission and FSI permission when returning from system settings
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return
+      checkPermissionStatusAsync().then(setNotifStatus)
+      if (Capacitor.isNativePlatform()) {
+        checkFullScreenIntentPermission().then(({ granted }) => setFsiGranted(granted))
+      }
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [])
+
   const persistSettings = (updated) => {
     saveSettings(updated)
     setSettings(updated)
@@ -61,24 +73,6 @@ export default function Settings() {
     if (alarm) await scheduleAlarmNotifications(alarm)
   }
 
-  const handleToggleNotifications = async () => {
-    const currentlyEnabled = settings.notificationsEnabled !== false
-    if (currentlyEnabled) {
-      // 알림 끄기: 모든 예약된 알림 취소
-      const updated = { ...settings, notificationsEnabled: false }
-      persistSettings(updated)
-      await cancelAllAlarmNotifications(updated.alarms)
-    } else {
-      // 알림 켜기: 권한 요청 후 알림 재등록
-      const updated = { ...settings, notificationsEnabled: true }
-      persistSettings(updated)
-      if (notifStatus !== 'granted') {
-        const result = await requestNotificationPermission()
-        setNotifStatus(result)
-      }
-      await syncAllAlarmNotifications(updated.alarms, updated.testMode)
-    }
-  }
 
   const handleExport = () => {
     const data = exportAllData()
@@ -132,37 +126,26 @@ export default function Settings() {
         <div className="header-sub">알람 및 앱 설정</div>
       </div>
 
-      {/* Notification permission */}
+      {/* Notification permission — taps to OS notification settings */}
       <div className="section">
         <div className="section-title">알림</div>
-        <div className="card card-body">
-          <div className="row-between">
-            <div>
-              <div style={{ fontSize: 15, fontWeight: 600 }}>알림 사용</div>
-              <div style={{ fontSize: 13, color: '#A0A0B8', marginTop: 2 }}>
-                {settings.notificationsEnabled !== false ? '알람 알림 켜짐' : '알람 알림 꺼짐'}
-                {' · '}
-                <span style={{ color: notifStatus === 'granted' ? '#00B894' : '#FF7675' }}>
-                  OS 권한 {notifStatus === 'granted' ? '허용' : notifStatus === 'denied' ? '차단' : '미설정'}
-                </span>
+        <div className="card" style={{ overflow: 'hidden' }}>
+          <button
+            onClick={async () => { if (Capacitor.isNativePlatform()) await openAppNotificationSettings() }}
+            style={{
+              display: 'flex', alignItems: 'center',
+              width: '100%', background: 'none', border: 'none',
+              padding: '14px 16px', cursor: 'pointer', textAlign: 'left',
+            }}
+          >
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 15, fontWeight: 600, color: '#1E1E2E' }}>알림 사용</div>
+              <div style={{ fontSize: 13, marginTop: 2, color: notifStatus === 'granted' ? '#00B894' : '#FF7675' }}>
+                {notifStatus === 'granted' ? '허용됨' : '꺼짐 — 탭하여 설정'}
               </div>
             </div>
-            <label className="toggle-wrap">
-              <input
-                type="checkbox"
-                checked={settings.notificationsEnabled !== false}
-                onChange={handleToggleNotifications}
-              />
-              <div className="toggle-track" />
-            </label>
-          </div>
-          {notifStatus !== 'granted' && settings.notificationsEnabled !== false && (
-            <div style={{ marginTop: 12, padding: '10px 12px', background: '#FFF8E6', borderRadius: 10, fontSize: 12, color: '#7A5800', lineHeight: 1.5 }}>
-              {Capacitor.isNativePlatform()
-                ? '⚠️ 기기 설정 > 앱 > Body Rhythm 알람 > 알림에서 허용해주세요.'
-                : '⚠️ 알림을 허용해야 알람이 울립니다. 앱이 열려 있을 때만 동작합니다.'}
-            </div>
-          )}
+            <span style={{ color: '#A0A0B8', fontSize: 20 }}>›</span>
+          </button>
         </div>
       </div>
 

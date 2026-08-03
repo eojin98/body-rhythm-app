@@ -369,10 +369,6 @@ export async function cancelTestHourlyNotifications() {
 export async function syncAllAlarmNotifications(alarms, testMode = false) {
   if (!isNative()) return
   const settings = getSettings()
-  if (settings.notificationsEnabled === false) {
-    await cancelAllAlarmNotifications(alarms)
-    return
-  }
   for (const alarm of alarms) {
     await scheduleAlarmNotifications(alarm)
   }
@@ -410,7 +406,6 @@ export function showNotification(title, body) {
 // Web-only polling: called every 30s to fire alarms at the right minute
 export function checkAndFireAlarms(alarms) {
   if (isNative() || !alarms || Notification.permission !== 'granted') return
-  if (getSettings().notificationsEnabled === false) return
 
   const now = new Date()
   const hh = String(now.getHours()).padStart(2, '0')

@@ -57,10 +57,19 @@ export async function syncPendingBoostActions() {
   try {
     const { actions } = await BoostAlarm.getPendingActions()
     const list = JSON.parse(actions || '[]')
-    for (const { periodId, date, action } of list) {
-      if (action === 'done' || action === 'skipped') {
-        saveRoutineAction(date, periodId, action)
-        recordPoint({ date, alarmId: periodId, routineAction: action })
+    const now = Date.now()
+    for (const { periodId, date, action, timerSeconds, firedAt } of list) {
+      // 10분(600,000ms) 초과 응답: 루틴 기록은 정상 저장, 포인트만 0으로 처리
+      const isLate = firedAt != null && (now - firedAt) > 10 * 60 * 1000
+      if (action === 'done') {
+        saveRoutineAction(date, periodId, 'done')
+        recordPoint({ date, alarmId: periodId, action: 'boost_complete', points: isLate ? 0 : undefined })
+      } else if (action === 'timer_complete') {
+        saveRoutineAction(date, periodId, 'done')
+        recordPoint({ date, alarmId: periodId, action: 'boost_timer_complete', timerSeconds: isLate ? null : timerSeconds, points: isLate ? 0 : undefined })
+      } else if (action === 'skipped') {
+        saveRoutineAction(date, periodId, 'skipped')
+        recordPoint({ date, alarmId: periodId, action: 'skip' })
       }
     }
   } catch (e) {
@@ -89,4 +98,13 @@ export async function checkFullScreenIntentPermission() {
 export async function openFullScreenIntentSettings() {
   if (!isNative()) return
   try { await BoostAlarm.openFullScreenIntentSettings() } catch {}
+}
+
+/**
+ * Opens the OS notification settings page for this app so the user can enable/disable
+ * notification permission (Settings > Apps > Body Rhythm 알람 > Notifications).
+ */
+export async function openAppNotificationSettings() {
+  if (!isNative()) return
+  try { await BoostAlarm.openAppNotificationSettings() } catch {}
 }
