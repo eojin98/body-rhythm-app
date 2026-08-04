@@ -13,7 +13,7 @@ import {
   scheduleSnoozeNotification,
   scheduleTestSnoozeNotification,
 } from './utils/notifications'
-import { syncPendingBoostActions } from './utils/boostAlarm'
+import { syncPendingBoostActions, getActiveTimerState } from './utils/boostAlarm'
 import { TEST_HOURLY_BEHAVIORS } from './utils/alarmContent'
 import { recordPoint } from './utils/pointLedger'
 import Onboarding from './pages/Onboarding'
@@ -34,6 +34,8 @@ function AppContent() {
     return getSettings().onboardingComplete || false
   })
   const [exitConfirmVisible, setExitConfirmVisible] = useState(false)
+  const [activeTimer, setActiveTimer] = useState(null)   // { alarmLabel, endsAt }
+  const [timerDisplay, setTimerDisplay] = useState('')
 
   // Refs so the back-button listener always reads the latest values
   // without needing to re-register on every render.
@@ -65,6 +67,21 @@ function AppContent() {
     return () => { subscription.then(handle => handle.remove()) }
   }, [navigate])
 
+  // ─── Active timer banner countdown ──────────────────────────────────────────
+  useEffect(() => {
+    if (!activeTimer) { setTimerDisplay(''); return }
+    const tick = () => {
+      const secs = Math.max(0, Math.floor((activeTimer.endsAt - Date.now()) / 1000))
+      if (secs === 0) { setActiveTimer(null); return }
+      const m = Math.floor(secs / 60)
+      const s = secs % 60
+      setTimerDisplay(m > 0 ? `${m}분 ${String(s).padStart(2, '0')}초` : `${s}초`)
+    }
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [activeTimer])
+
   // ─── Alarm / notification setup ─────────────────────────────────────────────
   useEffect(() => {
     const s = getSettings()
@@ -78,6 +95,16 @@ function AppContent() {
 
       // Sync any done/skipped actions recorded by BoostAlarmActivity while app was dead
       syncPendingBoostActions()
+
+      const refreshTimer = async () => {
+        try {
+          const state = await getActiveTimerState()
+          setActiveTimer(state.active
+            ? { alarmLabel: state.alarmLabel, endsAt: Date.now() + state.remainingSeconds * 1000 }
+            : null)
+        } catch {}
+      }
+      refreshTimer()
 
       // Handle notification action buttons (완료 / 나중에 / 건너뜀)
       const removeActionListener = initNotificationActionListener(
@@ -110,9 +137,8 @@ function AppContent() {
       // 앱이 백그라운드에서 포그라운드로 복귀할 때 재스케줄
       const handleVisibilityChange = () => {
         if (document.visibilityState === 'visible') {
-          const settings = getSettings()
-          syncAllAlarmNotifications(settings.alarms, settings.testMode)
           syncPendingBoostActions()
+          refreshTimer()
         }
       }
       document.addEventListener('visibilitychange', handleVisibilityChange)
@@ -120,7 +146,7 @@ function AppContent() {
       // Capacitor appStateChange: BoostAlarmActivity → MainActivity 전환 시
       // visibilitychange가 발화하지 않는 경우를 위한 이중 안전장치
       const appStateHandle = CapApp.addListener('appStateChange', ({ isActive }) => {
-        if (isActive) syncPendingBoostActions()
+        if (isActive) { syncPendingBoostActions(); refreshTimer() }
       })
 
       return () => {
@@ -151,6 +177,23 @@ function AppContent() {
 
   return (
     <>
+      {activeTimer && timerDisplay && (
+        <div style={{
+          padding: '10px 16px', background: '#EDE9FF',
+          borderBottom: '1px solid #C9C3F5', flexShrink: 0,
+          display: 'flex', alignItems: 'center', gap: 10,
+        }}>
+          <span style={{ fontSize: 20 }}>⏱</span>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#6C5CE7' }}>
+              {activeTimer.alarmLabel} 타이머 진행 중
+            </div>
+            <div style={{ fontSize: 12, color: '#6E6E8A', marginTop: 2 }}>
+              {timerDisplay} 후 자동 완료돼요
+            </div>
+          </div>
+        </div>
+      )}
       <div className={`page-content${location.pathname === '/checkin' ? ' page-content-full' : ''}`}>
         <Routes>
           <Route path="/" element={<Home />} />

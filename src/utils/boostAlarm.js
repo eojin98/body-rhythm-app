@@ -1,9 +1,22 @@
 import { Capacitor, registerPlugin } from '@capacitor/core'
 import { saveRoutineAction } from './storage'
 import { recordPoint } from './pointLedger'
+import { TEST_HOURLY_BEHAVIORS } from './alarmContent'
 
 const BoostAlarm = registerPlugin('BoostAlarm')
 const isNative = () => Capacitor.isNativePlatform()
+
+// ─── Occurrence status constants (mirrors Java BoostAlarmPlugin) ──────────────
+export const AlarmOccurrenceStatus = {
+  SCHEDULED:     'SCHEDULED',
+  RINGING:       'RINGING',
+  SNOOZED:       'SNOOZED',
+  TIMER_RUNNING: 'TIMER_RUNNING',
+  COMPLETED:     'COMPLETED',
+  CANCELLED:     'CANCELLED',
+  SKIPPED:       'SKIPPED',
+  EXPIRED:       'EXPIRED',
+}
 
 // ─── Scheduling ──────────────────────────────────────────────────────────────
 
@@ -28,6 +41,23 @@ export async function scheduleBoostAlarms(hourlyAlarmSettings = {}) {
 export async function cancelBoostAlarms() {
   if (!isNative()) return
   try { await BoostAlarm.cancelAll() } catch {}
+}
+
+/**
+ * Returns the currently-running timer state if any, for the cold-start banner.
+ * { active: true, hour, remainingSeconds, alarmLabel } or { active: false }
+ */
+export async function getActiveTimerState() {
+  if (!isNative()) return { active: false }
+  try {
+    const result = await BoostAlarm.getActiveTimerState()
+    if (!result.active) return { active: false }
+    const hk = String(result.hour).padStart(2, '0')
+    const alarmLabel = TEST_HOURLY_BEHAVIORS[hk]?.title ?? `${hk}:00 루틴`
+    return { active: true, hour: result.hour, remainingSeconds: result.remainingSeconds, alarmLabel }
+  } catch {
+    return { active: false }
+  }
 }
 
 /**
@@ -58,7 +88,7 @@ export async function syncPendingBoostActions() {
     const { actions } = await BoostAlarm.getPendingActions()
     const list = JSON.parse(actions || '[]')
     const now = Date.now()
-    for (const { periodId, date, action, timerSeconds, firedAt } of list) {
+    for (const { periodId, date, action, timerSeconds, firedAt, occurrenceId = null } of list) {
       // 10분(600,000ms) 초과 응답: 루틴 기록은 정상 저장, 포인트만 0으로 처리
       const isLate = firedAt != null && (now - firedAt) > 10 * 60 * 1000
       if (action === 'done') {

@@ -17,6 +17,7 @@ import {
   showNotification,
 } from '../utils/notifications'
 import { ALARM_PERIODS, getEffectiveBehaviors, TEST_HOURLY_BEHAVIORS, getCurrentPeriodGuide } from '../utils/alarmContent'
+import { recordPoint } from '../utils/pointLedger'
 import { getCurrentHourData, PHASE_COLORS } from '../data/circadianGuide'
 import ProgressRing from '../components/ProgressRing'
 
@@ -135,6 +136,7 @@ export default function Home() {
     const today = getTodayKey()
     if (action === 'done' || action === 'skipped') {
       saveRoutineAction(today, periodId, action)
+      recordPoint({ date: today, alarmId: periodId, action: action === 'done' ? 'normal_complete' : 'skip' })
     } else if (action === 'clear') {
       clearRoutineAction(today, periodId)
     } else if (action === 'snooze') {

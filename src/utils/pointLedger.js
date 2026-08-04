@@ -99,7 +99,7 @@ export function recordPoint({ date, alarmId, action, timerSeconds = null, points
   const entry = {
     id:          idx >= 0 ? ledger[idx].id : generateId(),
     date,
-    time,
+    time:        idx >= 0 ? ledger[idx].time : time,
     alarmId,
     alarmLabel,
     action,
@@ -132,11 +132,15 @@ export function getTodayPoints() {
     .reduce((sum, e) => sum + (e.points || 0), 0)
 }
 
+function byOccurrenceDesc(a, b) {
+  return (`${b.date} ${b.time}`).localeCompare(`${a.date} ${a.time}`)
+}
+
 /** 최근 N개 적립 내역 (최신순) */
 export function getRecentEntries(n = 10) {
   return getLedger()
     .slice()
-    .sort((a, b) => b.timestamp - a.timestamp)
+    .sort(byOccurrenceDesc)
     .slice(0, n)
 }
 
@@ -144,14 +148,14 @@ export function getRecentEntries(n = 10) {
 export function getAllEntries() {
   return getLedger()
     .slice()
-    .sort((a, b) => b.timestamp - a.timestamp)
+    .sort(byOccurrenceDesc)
 }
 
 /** 특정 날짜의 적립 내역 (최신순) */
 export function getEntriesByDate(dateKey) {
   return getLedger()
     .filter(e => e.date === dateKey)
-    .sort((a, b) => b.timestamp - a.timestamp)
+    .sort(byOccurrenceDesc)
 }
 
 /** 원장 전체 삭제 (개발용) */
