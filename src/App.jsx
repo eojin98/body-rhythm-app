@@ -25,6 +25,7 @@ import Settings from './pages/Settings'
 import CircadianDetailPage from './pages/CircadianDetailPage'
 import HealthRecords from './pages/HealthRecords'
 import HourlyAlarmEdit from './pages/HourlyAlarmEdit'
+import PointHistory from './pages/PointHistory'
 import BottomNav from './components/BottomNav'
 
 function AppContent() {
@@ -204,10 +205,11 @@ function AppContent() {
           <Route path="/circadian-detail" element={<CircadianDetailPage />} />
           <Route path="/health-records" element={<HealthRecords />} />
           <Route path="/hourly-alarm-edit" element={<HourlyAlarmEdit />} />
+          <Route path="/point-history" element={<PointHistory />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
-      {location.pathname !== '/checkin' && location.pathname !== '/circadian-detail' && location.pathname !== '/hourly-alarm-edit' && <BottomNav />}
+      {location.pathname !== '/checkin' && location.pathname !== '/circadian-detail' && location.pathname !== '/hourly-alarm-edit' && location.pathname !== '/point-history' && <BottomNav />}
 
       {/* ─── 앱 종료 확인 팝업 ─────────────────────────────────────────── */}
       {exitConfirmVisible && (

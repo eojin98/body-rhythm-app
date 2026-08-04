@@ -40,10 +40,6 @@ export default function HourlyAlarmEdit() {
     const currentEntry = { enabled: true, boostMode: false, ...settings.hourlyAlarmSettings?.[hk] }
     const newEntry = { ...currentEntry, ...patch }
 
-    if (patch.enabled === false) {
-      newEntry.boostMode = false
-    }
-
     const updated = {
       ...settings,
       hourlyAlarmSettings: { ...(settings.hourlyAlarmSettings ?? {}), [hk]: newEntry },
@@ -254,6 +250,9 @@ export default function HourlyAlarmEdit() {
                 >
                   🔥
                 </button>
+
+                {/* Separator — keeps boost button and toggle visually distinct */}
+                <div style={{ width: 1, height: 26, background: 'var(--border)', flexShrink: 0, margin: '0 4px' }} />
 
                 {/* On/Off toggle */}
                 <label className="toggle-wrap" style={{ flexShrink: 0 }}>
