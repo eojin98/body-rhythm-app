@@ -15,7 +15,7 @@ import {
 } from './utils/notifications'
 import { syncPendingBoostActions, getActiveTimerState } from './utils/boostAlarm'
 import { TEST_HOURLY_BEHAVIORS } from './utils/alarmContent'
-import { recordPoint } from './utils/pointLedger'
+import { recordPoint, POINT_POLICY } from './utils/pointLedger'
 import Onboarding from './pages/Onboarding'
 import Home from './pages/Home'
 import MorningCheckin from './pages/MorningCheckin'
@@ -109,21 +109,25 @@ function AppContent() {
 
       // Handle notification action buttons (완료 / 나중에 / 건너뜀)
       const removeActionListener = initNotificationActionListener(
-        async (periodId, action, snoozeMins = 30) => {
-          const today = getTodayKey()
-          if (action === 'done' || action === 'skipped') {
-            saveRoutineAction(today, periodId, action)
-            recordPoint({ date: today, alarmId: periodId, action: action === 'done' ? 'normal_complete' : 'skip' })
+        async (periodId, action, snoozeMins = 30, firedDate, firstFiredAtMs) => {
+          const date = firedDate || getTodayKey()
+          const isLate = firstFiredAtMs != null && (Date.now() - firstFiredAtMs) > POINT_POLICY.REACTION_DEADLINE_MS
+          if (action === 'done') {
+            saveRoutineAction(date, periodId, 'done')
+            recordPoint({ date, alarmId: periodId, action: 'normal_complete', points: isLate ? 0 : undefined })
+          } else if (action === 'skipped') {
+            saveRoutineAction(date, periodId, 'skipped')
+            // 건너뜀 = 0P → 원장 미기록 (policy 4)
           } else if (action === 'snooze') {
             setSnooze(periodId, Date.now() + snoozeMins * 60 * 1000)
             if (periodId.startsWith('test_')) {
               const hk = periodId.replace('test_', '')
               const behavior = TEST_HOURLY_BEHAVIORS[hk]
-              await scheduleTestSnoozeNotification(hk, behavior, snoozeMins)
+              await scheduleTestSnoozeNotification(hk, behavior, snoozeMins, firstFiredAtMs)
             } else {
               const settings = getSettings()
               const alarm = settings.alarms.find(a => a.type === periodId)
-              if (alarm) await scheduleSnoozeNotification(alarm, snoozeMins)
+              if (alarm) await scheduleSnoozeNotification(alarm, snoozeMins, firstFiredAtMs)
             }
           }
         },

@@ -1,29 +1,46 @@
 import { getDeviceId, getTodayKey } from './storage'
 import { ALARM_PERIODS, TEST_HOURLY_BEHAVIORS } from './alarmContent'
 
-// ─── Point rules (single source of truth) ────────────────────────────────────
+// ─── 정책 상수 (단일 출처) ───────────────────────────────────────────────────
+
+/** 최초 발화 시각으로부터 이 시간 이내 반응해야 포인트 지급 */
+export const POINT_POLICY = {
+  REACTION_DEADLINE_MS: 15 * 60 * 1000,   // 15분
+}
+
+// ─── 포인트 규칙 (단일 출처) ─────────────────────────────────────────────────
 
 export const POINT_ACTIONS = {
   NORMAL_COMPLETE:      'normal_complete',       // 일반 알람 완료: 1P
   BOOST_COMPLETE:       'boost_complete',         // 강화모드 즉시 완료: 2P
-  BOOST_TIMER_COMPLETE: 'boost_timer_complete',   // 강화모드 타이머 완료: timerSeconds 기준 5/8/10P
-  SKIP:                 'skip',                   // 건너뜀: 0P
+  BOOST_TIMER_COMPLETE: 'boost_timer_complete',   // 강화모드 타이머 완료: 5/8/10P
+  SKIP:                 'skip',                   // 건너뜀: 0P (원장 미기록)
 }
 
-// boost_timer_complete는 timerSeconds에 따라 동적 계산 — null로 표시
+// 포인트 값 상수 (타이머는 구간별 동적 계산 → null)
+const P = {
+  NORMAL:        1,
+  BOOST:         2,
+  TIMER_SHORT:   5,    // ≤60s
+  TIMER_MEDIUM:  8,    // 61–599s
+  TIMER_FULL:   10,    // ≥600s (10분)
+  TIMER_FULL_MIN_S:   600,
+  TIMER_MEDIUM_MIN_S:  61,
+}
+
 export const POINT_VALUES = {
-  [POINT_ACTIONS.NORMAL_COMPLETE]:      1,
-  [POINT_ACTIONS.BOOST_COMPLETE]:       2,
+  [POINT_ACTIONS.NORMAL_COMPLETE]:      P.NORMAL,
+  [POINT_ACTIONS.BOOST_COMPLETE]:       P.BOOST,
   [POINT_ACTIONS.BOOST_TIMER_COMPLETE]: null,
   [POINT_ACTIONS.SKIP]:                 0,
 }
 
-// timerSeconds 기준: ≤60s → 5P, 61~599s → 8P, ≥600s → 10P
+// timerSeconds 기준: ≤60s → 5P, 61–599s → 8P, ≥600s → 10P
 function calcPoints(action, timerSeconds) {
   if (action === POINT_ACTIONS.BOOST_TIMER_COMPLETE) {
-    if (timerSeconds >= 600) return 10
-    if (timerSeconds >= 61)  return 8
-    return 5
+    if (timerSeconds >= P.TIMER_FULL_MIN_S)   return P.TIMER_FULL
+    if (timerSeconds >= P.TIMER_MEDIUM_MIN_S) return P.TIMER_MEDIUM
+    return P.TIMER_SHORT
   }
   return POINT_VALUES[action] ?? 0
 }
@@ -72,47 +89,51 @@ function resolveTimeStr(alarmId) {
   return `${String(n.getHours()).padStart(2, '0')}:${String(n.getMinutes()).padStart(2, '0')}`
 }
 
-// ─── Core: record a point (upsert) ───────────────────────────────────────────
+// ─── Core: record a point ────────────────────────────────────────────────────
 
 /**
- * 알람 완료·건너뜀 시 포인트 원장에 기록한다.
+ * 알람 완료 시 포인트 원장에 기록한다.
  *
  * @param {object} params
- * @param {string} params.date           - 'yyyy-MM-dd'  (네이티브 sync 시 실제 발생일)
- * @param {string} params.alarmId        - periodId ('morning', 'test_09' 등)
- * @param {string} params.action         - POINT_ACTIONS 값 중 하나
- * @param {number} [params.timerSeconds] - boost_timer_complete 시 타이머 실행 시간(초)
+ * @param {string} params.date            - 'yyyy-MM-dd' (실제 알람 발화 날짜)
+ * @param {string} params.alarmId         - periodId ('morning', 'test_09' 등)
+ * @param {string} params.action          - POINT_ACTIONS 값 중 하나
+ * @param {number} [params.timerSeconds]  - boost_timer_complete 시 타이머 실행 시간(초)
+ * @param {number} [params.points]        - 직접 지정 시 calcPoints 우선 덮어씀 (0이면 미기록)
+ * @param {string|null} [params.occurrenceId] - 강화알람 회차 ID (없으면 date+alarmId로 중복 판정)
  *
- * 중복 방지: 같은 (date, alarmId) 조합이 있으면 기존 항목을 갱신(upsert).
- * 예: skip(0P) 기록 후 boost_complete(2P)로 수정 → 포인트가 2P로 갱신됨.
+ * 정책:
+ * - 0P는 원장에 기록하지 않음 (policy 4)
+ * - occurrenceId(또는 date+alarmId)가 이미 원장에 있으면 재기록하지 않음 (policy 5)
  */
-export function recordPoint({ date, alarmId, action, timerSeconds = null, points: pointsOverride = undefined }) {
-  if (!(action in POINT_VALUES)) return  // 알 수 없는 action은 무시
+export function recordPoint({ date, alarmId, action, timerSeconds = null, points: pointsOverride = undefined, occurrenceId = null }) {
+  if (!(action in POINT_VALUES)) return
 
   const points = pointsOverride !== undefined ? pointsOverride : calcPoints(action, timerSeconds)
-  const alarmLabel = getLabelForAlarm(alarmId)
-  const time       = resolveTimeStr(alarmId)
-  const ledger     = getLedger()
 
-  const idx = ledger.findIndex(e => e.date === date && e.alarmId === alarmId)
+  // Policy 4: 0P는 원장 미기록 (건너뜀·지각완료 등)
+  if (points === 0) return
 
-  const entry = {
-    id:          idx >= 0 ? ledger[idx].id : generateId(),
+  const ledger = getLedger()
+
+  // Policy 5: 회차당 1회 지급 (occurrenceId 우선, fallback: date+alarmId)
+  const alreadyExists = occurrenceId
+    ? ledger.some(e => e.occurrenceId === occurrenceId)
+    : ledger.some(e => e.date === date && e.alarmId === alarmId)
+  if (alreadyExists) return
+
+  ledger.push({
+    id: generateId(),
     date,
-    time:        idx >= 0 ? ledger[idx].time : time,
+    time: resolveTimeStr(alarmId),
     alarmId,
-    alarmLabel,
+    alarmLabel: getLabelForAlarm(alarmId),
     action,
     points,
     timerSeconds,
-    timestamp:   Date.now(),
-  }
-
-  if (idx >= 0) {
-    ledger[idx] = entry  // 기존 항목 갱신 (예: skip→boost_complete 업그레이드)
-  } else {
-    ledger.push(entry)
-  }
+    occurrenceId,
+    timestamp: Date.now(),
+  })
 
   saveLedger(ledger)
 }

@@ -17,7 +17,7 @@ import {
   showNotification,
 } from '../utils/notifications'
 import { ALARM_PERIODS, getEffectiveBehaviors, TEST_HOURLY_BEHAVIORS, getCurrentPeriodGuide } from '../utils/alarmContent'
-import { recordPoint } from '../utils/pointLedger'
+import { recordPoint, POINT_POLICY } from '../utils/pointLedger'
 import { getCurrentHourData, PHASE_COLORS } from '../data/circadianGuide'
 import ProgressRing from '../components/ProgressRing'
 
@@ -134,9 +134,24 @@ export default function Home() {
 
   const handleRoutineAction = async (periodId, action, snoozeMins = 30) => {
     const today = getTodayKey()
-    if (action === 'done' || action === 'skipped') {
-      saveRoutineAction(today, periodId, action)
-      recordPoint({ date: today, alarmId: periodId, action: action === 'done' ? 'normal_complete' : 'skip' })
+
+    // firstFiredAtMs: 알람의 예정 발화 시각 (15분 기한 판정 기준)
+    let firstFiredAtMs = null
+    if (periodId.startsWith('test_')) {
+      const h = parseInt(periodId.replace('test_', ''), 10)
+      firstFiredAtMs = new Date(`${today}T${String(h).padStart(2, '0')}:00:00`).getTime()
+    } else {
+      const alm = settings.alarms.find(a => a.type === periodId)
+      if (alm?.time) firstFiredAtMs = new Date(`${today}T${alm.time}:00`).getTime()
+    }
+
+    if (action === 'done') {
+      saveRoutineAction(today, periodId, 'done')
+      const isLate = firstFiredAtMs != null && (Date.now() - firstFiredAtMs) > POINT_POLICY.REACTION_DEADLINE_MS
+      recordPoint({ date: today, alarmId: periodId, action: 'normal_complete', points: isLate ? 0 : undefined })
+    } else if (action === 'skipped') {
+      saveRoutineAction(today, periodId, 'skipped')
+      // 건너뜀 = 0P → 원장 미기록 (policy 4)
     } else if (action === 'clear') {
       clearRoutineAction(today, periodId)
     } else if (action === 'snooze') {
@@ -145,10 +160,10 @@ export default function Home() {
         // 테스트 모드: 별도 알림 예약 (settings.alarms에 없음)
         const hk = periodId.replace('test_', '')
         const behavior = TEST_HOURLY_BEHAVIORS[hk]
-        await scheduleTestSnoozeNotification(hk, behavior, snoozeMins)
+        await scheduleTestSnoozeNotification(hk, behavior, snoozeMins, firstFiredAtMs)
       } else {
         const alarm = settings.alarms.find(a => a.type === periodId)
-        if (alarm) await scheduleSnoozeNotification(alarm, snoozeMins)
+        if (alarm) await scheduleSnoozeNotification(alarm, snoozeMins, firstFiredAtMs)
       }
     }
     const rec = getRecord(today)

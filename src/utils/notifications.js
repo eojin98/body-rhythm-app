@@ -6,6 +6,55 @@ import { scheduleBoostAlarms, cancelBoostAlarms } from './boostAlarm'
 
 const isNative = () => Capacitor.isNativePlatform()
 
+// ─── Date helpers for firedDate/firedHour ────────────────────────────────────
+
+function dateKey(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/**
+ * Derives the alarm's actual fire date from notification extras.
+ *
+ * One-shot notifications (snooze) store an exact `firedDate` string.
+ * Repeating daily notifications store `firedHour` (the scheduled hour).
+ * Heuristic: if firedHour > current hour, the notification is from a past
+ * occurrence (most likely yesterday) — use yesterday's date.
+ * Returns null when neither field is present (caller falls back to today).
+ */
+function resolveFiredDate(extra) {
+  if (extra.firedDate) return extra.firedDate
+  if (extra.firedHour != null) {
+    const now = new Date()
+    if (extra.firedHour > now.getHours()) {
+      const d = new Date(now)
+      d.setDate(d.getDate() - 1)
+      return dateKey(d)
+    }
+  }
+  return null
+}
+
+/**
+ * Returns the Unix-ms timestamp of when the alarm originally fired.
+ * Used for the 15-minute reaction deadline check (POINT_POLICY.REACTION_DEADLINE_MS).
+ *
+ * Snooze notifications carry `originalFiredAtMs` (set when the snooze was scheduled)
+ * so the deadline is always measured from the FIRST fire, not the snooze re-fire.
+ * Repeating alarms reconstruct the time from `firedHour` + `firedMinute` + `firedDate`.
+ */
+function resolveFirstFiredAtMs(extra) {
+  if (extra.originalFiredAtMs != null) return extra.originalFiredAtMs
+  if (extra.firedHour != null) {
+    const firedDate = resolveFiredDate(extra)
+    if (firedDate) {
+      const h = String(extra.firedHour).padStart(2, '0')
+      const m = String(extra.firedMinute ?? 0).padStart(2, '0')
+      return new Date(`${firedDate}T${h}:${m}:00`).getTime()
+    }
+  }
+  return null
+}
+
 // Native plugin to check device ringer mode (Android only)
 const DeviceRinger = registerPlugin('DeviceRinger')
 
@@ -187,7 +236,7 @@ export async function registerNotificationActionTypes() {
 }
 
 // Set up listener for notification action button clicks.
-// Calls onAction(periodId, action, snoozeMins) when a button is tapped.
+// Calls onAction(periodId, action, snoozeMins, firedDate, firstFiredAtMs) when a button is tapped.
 // Must be called once on app init (before any notification fires).
 export function initNotificationActionListener(onAction) {
   if (!isNative()) return () => {}
@@ -198,14 +247,16 @@ export function initNotificationActionListener(onAction) {
       const periodId = extra.periodId
       if (!periodId) return
 
+      const firedDate     = resolveFiredDate(extra)
+      const firstFiredAtMs = resolveFirstFiredAtMs(extra)
       const actionId = event.actionId // 'done' | 'later' | 'skip' | 'tap'
       if (actionId === 'done') {
-        onAction(periodId, 'done')
+        onAction(periodId, 'done', undefined, firedDate, firstFiredAtMs)
       } else if (actionId === 'later') {
         const snoozeMins = periodId.startsWith('test_') ? 10 : 30
-        onAction(periodId, 'snooze', snoozeMins)
+        onAction(periodId, 'snooze', snoozeMins, firedDate, firstFiredAtMs)
       } else if (actionId === 'skip') {
-        onAction(periodId, 'skipped')
+        onAction(periodId, 'skipped', undefined, firedDate, firstFiredAtMs)
       }
       // 'tap' (사용자가 알림 자체를 탭) — 앱을 열기만 하므로 별도 처리 없음
     },
@@ -229,7 +280,7 @@ export async function scheduleAlarmNotifications(alarm, soundMode) {
     body,
     channelId,
     actionTypeId: 'HABIT_ACTION',
-    extra: { periodId: alarm.type, alarmId: alarm.id },
+    extra: { periodId: alarm.type, alarmId: alarm.id, firedHour: hour, firedMinute: minute },
     schedule: {
       // second: 0 — Android AlarmManager가 초 단위를 현재 시각에서 상속하지 않도록 명시
       on: { weekday: dayIndex + 1, hour, minute, second: 0 },
@@ -243,7 +294,8 @@ export async function scheduleAlarmNotifications(alarm, soundMode) {
 }
 
 // Schedule a one-time snooze notification (native only)
-export async function scheduleSnoozeNotification(alarm, snoozeMins = 30) {
+// originalFiredAtMs: Unix ms of the alarm's FIRST fire time (for policy 2 deadline preservation)
+export async function scheduleSnoozeNotification(alarm, snoozeMins = 30, originalFiredAtMs = null) {
   if (!isNative()) return
   const { title, body } = buildNotifContent(alarm)
   const snoozeId = toNotifId(alarm.id, 8) // slot 8 = snooze
@@ -260,7 +312,7 @@ export async function scheduleSnoozeNotification(alarm, snoozeMins = 30) {
       body,
       channelId,
       actionTypeId: 'HABIT_ACTION',
-      extra: { periodId: alarm.type, alarmId: alarm.id },
+      extra: { periodId: alarm.type, alarmId: alarm.id, firedDate: dateKey(snoozeAt), originalFiredAtMs },
       schedule: {
         at: snoozeAt,
         allowWhileIdle: true,
@@ -273,7 +325,8 @@ export async function scheduleSnoozeNotification(alarm, snoozeMins = 30) {
 // Schedule a one-time snooze for test-mode hourly alarms (ID 9098, fixed slot)
 const TEST_SNOOZE_NOTIF_ID = 9098
 
-export async function scheduleTestSnoozeNotification(hk, behavior, snoozeMins = 10) {
+// originalFiredAtMs: Unix ms of the alarm's FIRST fire time (for policy 2 deadline preservation)
+export async function scheduleTestSnoozeNotification(hk, behavior, snoozeMins = 10, originalFiredAtMs = null) {
   if (!isNative()) return
   const h = parseInt(hk, 10)
   const dh = h === 0 ? 12 : h > 12 ? h - 12 : h
@@ -291,7 +344,7 @@ export async function scheduleTestSnoozeNotification(hk, behavior, snoozeMins = 
       body: behavior?.title ?? '루틴 알람',
       channelId,
       actionTypeId: 'HABIT_ACTION',
-      extra: { periodId: `test_${hk}` },
+      extra: { periodId: `test_${hk}`, firedDate: dateKey(testSnoozeAt), originalFiredAtMs },
       schedule: {
         at: testSnoozeAt,
         allowWhileIdle: true,
@@ -344,7 +397,7 @@ export async function scheduleTestHourlyNotifications(hourlyAlarmSettings = {}) 
       body: behavior.title,
       channelId,
       actionTypeId: 'HABIT_ACTION',
-      extra: { periodId: `test_${hk}` },
+      extra: { periodId: `test_${hk}`, firedHour: h, firedMinute: 0 },
       schedule: {
         on: { hour: h, minute: 0, second: 0 },
         repeats: true,

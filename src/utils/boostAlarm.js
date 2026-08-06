@@ -1,6 +1,6 @@
 import { Capacitor, registerPlugin } from '@capacitor/core'
 import { saveRoutineAction } from './storage'
-import { recordPoint } from './pointLedger'
+import { recordPoint, POINT_POLICY } from './pointLedger'
 import { TEST_HOURLY_BEHAVIORS } from './alarmContent'
 
 const BoostAlarm = registerPlugin('BoostAlarm')
@@ -89,17 +89,19 @@ export async function syncPendingBoostActions() {
     const list = JSON.parse(actions || '[]')
     const now = Date.now()
     for (const { periodId, date, action, timerSeconds, firedAt, occurrenceId = null } of list) {
-      // 10분(600,000ms) 초과 응답: 루틴 기록은 정상 저장, 포인트만 0으로 처리
-      const isLate = firedAt != null && (now - firedAt) > 10 * 60 * 1000
+      // 15분(REACTION_DEADLINE_MS) 초과 응답: 루틴 기록은 정상 저장, 포인트는 0(미기록)
+      // timer_complete는 타이머 실행 시간(timerSeconds)만큼 허용 시간을 추가 부여
+      const timerExtra = action === 'timer_complete' ? (timerSeconds || 0) * 1000 : 0
+      const isLate = firedAt != null && (now - firedAt) > POINT_POLICY.REACTION_DEADLINE_MS + timerExtra
       if (action === 'done') {
         saveRoutineAction(date, periodId, 'done')
-        recordPoint({ date, alarmId: periodId, action: 'boost_complete', points: isLate ? 0 : undefined })
+        recordPoint({ date, alarmId: periodId, action: 'boost_complete', occurrenceId, points: isLate ? 0 : undefined })
       } else if (action === 'timer_complete') {
         saveRoutineAction(date, periodId, 'done')
-        recordPoint({ date, alarmId: periodId, action: 'boost_timer_complete', timerSeconds: isLate ? null : timerSeconds, points: isLate ? 0 : undefined })
+        recordPoint({ date, alarmId: periodId, action: 'boost_timer_complete', timerSeconds: isLate ? null : timerSeconds, occurrenceId, points: isLate ? 0 : undefined })
       } else if (action === 'skipped') {
         saveRoutineAction(date, periodId, 'skipped')
-        recordPoint({ date, alarmId: periodId, action: 'skip' })
+        // 건너뜀 = 0P → 원장 미기록 (policy 4). 회차 종결은 AlarmOccurrenceStatus가 보장.
       }
     }
   } catch (e) {
