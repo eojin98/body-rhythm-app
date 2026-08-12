@@ -133,9 +133,13 @@ export function recordPoint({ date, alarmId, action, timerSeconds = null, points
     timerSeconds,
     occurrenceId,
     timestamp: Date.now(),
+    synced: false,
   })
 
   saveLedger(ledger)
+
+  // 포인트 기록 직후 sync 트리거 (App.jsx에서 구독)
+  try { window.dispatchEvent(new CustomEvent('bodyrhythm:pointRecorded')) } catch {}
 }
 
 // ─── Query helpers ────────────────────────────────────────────────────────────
@@ -182,4 +186,25 @@ export function getEntriesByDate(dateKey) {
 /** 원장 전체 삭제 (개발용) */
 export function clearLedger() {
   localStorage.removeItem(ledgerKey())
+}
+
+// ─── Sync helpers (pointSync.js에서 사용) ────────────────────────────────────
+
+/** 아직 서버에 올라가지 않은 원장 항목 목록 */
+export function getUnsyncedEntries() {
+  return getLedger().filter(e => !e.synced)
+}
+
+/** ids 에 해당하는 항목을 synced: true 로 표시 */
+export function markEntriesSynced(ids) {
+  const set = new Set(ids)
+  const ledger = getLedger()
+  let changed = false
+  for (const e of ledger) {
+    if (set.has(e.id) && !e.synced) {
+      e.synced = true
+      changed = true
+    }
+  }
+  if (changed) saveLedger(ledger)
 }

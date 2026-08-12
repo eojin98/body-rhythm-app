@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
+import { useAuth } from '../context/AuthContext'
 import { getSettings, saveSettings, DAY_NAMES, APP_VERSION, exportAllData, importAllData } from '../utils/storage'
 import { clearLedger } from '../utils/pointLedger'
+import { getServerTotalPoints } from '../lib/pointSync'
 import {
   getPermissionStatus,
   checkPermissionStatusAsync,
@@ -26,6 +28,7 @@ import { ALARM_PERIODS, PERIOD_ORDER, getEffectiveBehaviors } from '../utils/ala
 
 export default function Settings() {
   const navigate = useNavigate()
+  const { user, signOut } = useAuth()
   const [settings, setSettings] = useState(getSettings)
   const [notifStatus, setNotifStatus] = useState(getPermissionStatus)
   const [importMsg, setImportMsg] = useState(null)
@@ -34,6 +37,8 @@ export default function Settings() {
   const [fsiGranted, setFsiGranted] = useState(true)
   const [testAlarmFiring, setTestAlarmFiring] = useState(false)
   const [showPointResetConfirm, setShowPointResetConfirm] = useState(false)
+  const [serverPoints, setServerPoints] = useState(null)
+  const [serverPointsLoading, setServerPointsLoading] = useState(false)
   const fileInputRef = useRef(null)
 
   useEffect(() => {
@@ -461,6 +466,30 @@ export default function Settings() {
       <div className="section">
         <div className="section-title">개발자 도구</div>
         <div className="card card-body">
+          {/* 서버 포인트 확인 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button
+              onClick={async () => {
+                setServerPointsLoading(true)
+                const pts = await getServerTotalPoints()
+                setServerPoints(pts)
+                setServerPointsLoading(false)
+              }}
+              style={{
+                flex: 1, padding: '12px', borderRadius: 12, border: 'none',
+                background: '#EDE9FF', color: '#6C5CE7', fontWeight: 600,
+                fontSize: 14, cursor: 'pointer',
+              }}
+            >
+              {serverPointsLoading ? '조회 중…' : '☁ 서버 포인트 확인'}
+            </button>
+            {serverPoints !== null && (
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#6C5CE7', whiteSpace: 'nowrap' }}>
+                {serverPoints}P
+              </div>
+            )}
+          </div>
+
           {!showPointResetConfirm ? (
             <button
               onClick={() => setShowPointResetConfirm(true)}
@@ -497,6 +526,40 @@ export default function Settings() {
               </div>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Account */}
+      <div className="section">
+        <div className="section-title">계정</div>
+        <div className="card card-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              width: 36, height: 36, borderRadius: 18,
+              background: 'linear-gradient(135deg, #6C5CE7, #A29BFE)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: '#fff', fontWeight: 700, fontSize: 15, flexShrink: 0,
+            }}>
+              {user?.email?.[0]?.toUpperCase() ?? '?'}
+            </div>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#1E1E2E' }}>{user?.email ?? '—'}</div>
+              <div style={{ fontSize: 11, color: '#A0A0B8', marginTop: 1 }}>로그인됨</div>
+            </div>
+          </div>
+          <button
+            onClick={async () => {
+              try { await signOut() } catch {}
+              // onAuthStateChange가 user=null로 업데이트 → App의 guard가 /login으로 전환
+            }}
+            style={{
+              width: '100%', padding: '11px', borderRadius: 12, border: '1.5px solid #FFE0E0',
+              background: '#FFF5F5', color: '#FF7675', fontSize: 14,
+              fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+            }}
+          >
+            로그아웃
+          </button>
         </div>
       </div>
 

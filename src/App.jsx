@@ -2,6 +2,9 @@ import { HashRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'r
 import { useEffect, useRef, useState } from 'react'
 import { Capacitor } from '@capacitor/core'
 import { App as CapApp } from '@capacitor/app'
+import { AuthProvider, useAuth } from './context/AuthContext'
+import LoginPage from './pages/LoginPage'
+import SignupPage from './pages/SignupPage'
 import { getSettings, getTodayKey, saveRoutineAction, setSnooze } from './utils/storage'
 import {
   checkAndFireAlarms,
@@ -14,6 +17,7 @@ import {
   scheduleTestSnoozeNotification,
 } from './utils/notifications'
 import { syncPendingBoostActions, getActiveTimerState } from './utils/boostAlarm'
+import { syncPointsToServer } from './lib/pointSync'
 import { TEST_HOURLY_BEHAVIORS } from './utils/alarmContent'
 import { recordPoint, POINT_POLICY } from './utils/pointLedger'
 import Onboarding from './pages/Onboarding'
@@ -29,6 +33,7 @@ import PointHistory from './pages/PointHistory'
 import BottomNav from './components/BottomNav'
 
 function AppContent() {
+  const { user, loading: authLoading } = useAuth()
   const navigate  = useNavigate()
   const location  = useLocation()
   const [onboardingDone, setOnboardingDone] = useState(() => {
@@ -67,6 +72,19 @@ function AppContent() {
 
     return () => { subscription.then(handle => handle.remove()) }
   }, [navigate])
+
+  // ─── 포인트 서버 동기화 트리거 ──────────────────────────────────────────────
+  // 1) 로그인 성공(user null→non-null) 또는 이미 로그인된 채로 앱 시작 시
+  useEffect(() => {
+    if (user) syncPointsToServer()
+  }, [user])
+
+  // 2) recordPoint가 호출된 직후 (pointLedger.js에서 이벤트 발행)
+  useEffect(() => {
+    const handler = () => syncPointsToServer()
+    window.addEventListener('bodyrhythm:pointRecorded', handler)
+    return () => window.removeEventListener('bodyrhythm:pointRecorded', handler)
+  }, [])
 
   // ─── Active timer banner countdown ──────────────────────────────────────────
   useEffect(() => {
@@ -143,6 +161,7 @@ function AppContent() {
       const handleVisibilityChange = () => {
         if (document.visibilityState === 'visible') {
           syncPendingBoostActions()
+          syncPointsToServer()
           refreshTimer()
         }
       }
@@ -151,7 +170,7 @@ function AppContent() {
       // Capacitor appStateChange: BoostAlarmActivity → MainActivity 전환 시
       // visibilitychange가 발화하지 않는 경우를 위한 이중 안전장치
       const appStateHandle = CapApp.addListener('appStateChange', ({ isActive }) => {
-        if (isActive) { syncPendingBoostActions(); refreshTimer() }
+        if (isActive) { syncPendingBoostActions(); syncPointsToServer(); refreshTimer() }
       })
 
       return () => {
@@ -175,6 +194,31 @@ function AppContent() {
       }
     }
   }, [])
+
+  // ─── 인증 로딩 (세션 복원 중, 보통 수십ms) ───────────────────────────────────
+  if (authLoading) {
+    return (
+      <div style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center',
+        justifyContent: 'center', height: '100vh', background: 'var(--bg)', gap: 12,
+      }}>
+        <div style={{ fontSize: 44 }}>⏰</div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--primary)' }}>바디리듬</div>
+      </div>
+    )
+  }
+
+  // ─── 미인증 → 로그인/회원가입만 노출 ──────────────────────────────────────────
+  // 알람 useEffect는 이미 위에서 실행됐으므로 기존 알람 동작에 영향 없음
+  if (!user) {
+    return (
+      <Routes>
+        <Route path="/login"  element={<LoginPage />} />
+        <Route path="/signup" element={<SignupPage />} />
+        <Route path="*"       element={<Navigate to="/login" replace />} />
+      </Routes>
+    )
+  }
 
   if (!onboardingDone) {
     return <Onboarding onComplete={() => setOnboardingDone(true)} />
@@ -279,10 +323,12 @@ function AppContent() {
 
 export default function App() {
   return (
-    <HashRouter>
-      <div className="app-container">
-        <AppContent />
-      </div>
-    </HashRouter>
+    <AuthProvider>
+      <HashRouter>
+        <div className="app-container">
+          <AppContent />
+        </div>
+      </HashRouter>
+    </AuthProvider>
   )
 }
