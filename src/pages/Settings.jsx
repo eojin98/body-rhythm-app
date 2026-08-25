@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
 import { useAuth } from '../context/AuthContext'
 import { getSettings, saveSettings, DAY_NAMES, APP_VERSION, exportAllData, importAllData } from '../utils/storage'
-import { clearLedger } from '../utils/pointLedger'
-import { getServerTotalPoints } from '../lib/pointSync'
+import { clearLedger, getAllEntries, getUnsyncedEntries } from '../utils/pointLedger'
+import { getServerTotalPoints, syncPointsToServer, syncFromServer } from '../lib/pointSync'
 import {
   getPermissionStatus,
   checkPermissionStatusAsync,
@@ -26,6 +26,17 @@ import {
 } from '../utils/boostAlarm'
 import { ALARM_PERIODS, PERIOD_ORDER, getEffectiveBehaviors } from '../utils/alarmContent'
 
+function fmtSyncTime(isoStr) {
+  if (!isoStr) return '없음'
+  try {
+    const d = new Date(isoStr)
+    const hh = String(d.getHours()).padStart(2, '0')
+    const mm = String(d.getMinutes()).padStart(2, '0')
+    const ss = String(d.getSeconds()).padStart(2, '0')
+    return `${d.getMonth() + 1}/${d.getDate()} ${hh}:${mm}:${ss}`
+  } catch { return '?' }
+}
+
 export default function Settings() {
   const navigate = useNavigate()
   const { user, signOut } = useAuth()
@@ -39,6 +50,14 @@ export default function Settings() {
   const [showPointResetConfirm, setShowPointResetConfirm] = useState(false)
   const [serverPoints, setServerPoints] = useState(null)
   const [serverPointsLoading, setServerPointsLoading] = useState(false)
+  const [syncResult, setSyncResult] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('lastSyncResult') || 'null') } catch { return null }
+  })
+  const [manualSyncing, setManualSyncing] = useState(false)
+  const [ledgerStats, setLedgerStats] = useState(() => ({
+    total: getAllEntries().length,
+    unsynced: getUnsyncedEntries().length,
+  }))
   const fileInputRef = useRef(null)
 
   useEffect(() => {
@@ -62,6 +81,35 @@ export default function Settings() {
     document.addEventListener('visibilitychange', onVisible)
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [])
+
+  // 동기화 결과·원장 건수 자동 갱신
+  useEffect(() => {
+    const onSyncComplete = () => {
+      try { setSyncResult(JSON.parse(localStorage.getItem('lastSyncResult') || 'null')) } catch {}
+    }
+    const onLedgerChange = () => {
+      setLedgerStats({ total: getAllEntries().length, unsynced: getUnsyncedEntries().length })
+    }
+    window.addEventListener('bodyrhythm:syncComplete', onSyncComplete)
+    window.addEventListener('bodyrhythm:ledgerUpdated', onLedgerChange)
+    window.addEventListener('bodyrhythm:pointRecorded', onLedgerChange)
+    return () => {
+      window.removeEventListener('bodyrhythm:syncComplete', onSyncComplete)
+      window.removeEventListener('bodyrhythm:ledgerUpdated', onLedgerChange)
+      window.removeEventListener('bodyrhythm:pointRecorded', onLedgerChange)
+    }
+  }, [])
+
+  const handleManualSync = async () => {
+    if (manualSyncing || !user) return
+    setManualSyncing(true)
+    try {
+      await syncFromServer(user.id)
+      await syncPointsToServer()
+    } finally {
+      setManualSyncing(false)
+    }
+  }
 
   const persistSettings = (updated) => {
     saveSettings(updated)
@@ -466,6 +514,41 @@ export default function Settings() {
       <div className="section">
         <div className="section-title">개발자 도구</div>
         <div className="card card-body">
+          {/* ── 동기화 상태 ── */}
+          <div style={{ background: '#F5F4FF', borderRadius: 10, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#6C5CE7', marginBottom: 2 }}>동기화 상태</div>
+            {[
+              ['계정', user ? user.email : '로그아웃'],
+              ['마지막 동기화', fmtSyncTime(syncResult?.at)],
+              ['로컬 원장', `총 ${ledgerStats.total}건 / 미동기화 ${ledgerStats.unsynced}건`],
+            ].map(([label, value]) => (
+              <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#6E6E8A' }}>
+                <span>{label}</span>
+                <span style={{ color: '#1E1E2E', fontWeight: 600, textAlign: 'right', maxWidth: '65%', wordBreak: 'break-all' }}>{value}</span>
+              </div>
+            ))}
+            {syncResult && (
+              <div style={{ fontSize: 12, textAlign: 'right', fontWeight: 600, color: syncResult.ok ? '#00B894' : '#FF7675' }}>
+                {syncResult.ok
+                  ? `성공 (올림 ${syncResult.pushed}건, 받음 ${syncResult.pulled}건)`
+                  : `실패: ${syncResult.error || '알 수 없는 오류'}`}
+              </div>
+            )}
+            <button
+              onClick={handleManualSync}
+              disabled={manualSyncing || !user}
+              style={{
+                marginTop: 4, width: '100%', padding: '10px', borderRadius: 10, border: 'none',
+                background: (manualSyncing || !user) ? '#E0DEFF' : 'linear-gradient(135deg, #6C5CE7, #A29BFE)',
+                color: (manualSyncing || !user) ? '#A0A0B8' : '#fff',
+                fontWeight: 600, fontSize: 13, cursor: (manualSyncing || !user) ? 'not-allowed' : 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              {manualSyncing ? '동기화 중…' : '↑↓ 지금 동기화'}
+            </button>
+          </div>
+
           {/* 서버 포인트 확인 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <button

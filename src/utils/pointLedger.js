@@ -1,5 +1,17 @@
-import { getDeviceId, getTodayKey } from './storage'
+import { getTodayKey } from './storage'
 import { ALARM_PERIODS, TEST_HOURLY_BEHAVIORS } from './alarmContent'
+
+// ─── 현재 로그인한 user_id (AuthContext가 로그인/로그아웃 시 세팅) ──────────────
+let _currentUserId = null
+
+/**
+ * 현재 로그인한 user_id를 주입한다. AuthContext의 onAuthStateChange에서 호출.
+ * React 렌더 전에 동기적으로 세팅되어, 컴포넌트가 pointLedger를 읽을 때
+ * 올바른 user_id의 원장을 읽게 된다.
+ */
+export function setCurrentUser(uid) {
+  _currentUserId = uid ?? null
+}
 
 // ─── 정책 상수 (단일 출처) ───────────────────────────────────────────────────
 
@@ -45,15 +57,18 @@ function calcPoints(action, timerSeconds) {
   return POINT_VALUES[action] ?? 0
 }
 
-// ─── Storage ──────────────────────────────────────────────────────────────────
+// ─── Storage (user_id별 분리) ─────────────────────────────────────────────────
 
+// 키: pointLedger_{userId}  — user_id가 없으면 null (읽기/쓰기 모두 no-op)
 function ledgerKey() {
-  return `${getDeviceId()}_pointLedger`
+  return _currentUserId ? `pointLedger_${_currentUserId}` : null
 }
 
 function getLedger() {
+  const key = ledgerKey()
+  if (!key) return []
   try {
-    const raw = localStorage.getItem(ledgerKey())
+    const raw = localStorage.getItem(key)
     return raw ? JSON.parse(raw) : []
   } catch {
     return []
@@ -61,7 +76,9 @@ function getLedger() {
 }
 
 function saveLedger(ledger) {
-  localStorage.setItem(ledgerKey(), JSON.stringify(ledger))
+  const key = ledgerKey()
+  if (!key) return
+  localStorage.setItem(key, JSON.stringify(ledger))
 }
 
 function generateId() {
@@ -107,6 +124,8 @@ function resolveTimeStr(alarmId) {
  * - occurrenceId(또는 date+alarmId)가 이미 원장에 있으면 재기록하지 않음 (policy 5)
  */
 export function recordPoint({ date, alarmId, action, timerSeconds = null, points: pointsOverride = undefined, occurrenceId = null }) {
+  // 로그인 안 된 상태에서는 포인트 미기록 (알람 동작은 정상, 포인트만 건너뜀)
+  if (!_currentUserId) return
   if (!(action in POINT_VALUES)) return
 
   const points = pointsOverride !== undefined ? pointsOverride : calcPoints(action, timerSeconds)
@@ -185,7 +204,60 @@ export function getEntriesByDate(dateKey) {
 
 /** 원장 전체 삭제 (개발용) */
 export function clearLedger() {
-  localStorage.removeItem(ledgerKey())
+  const key = ledgerKey()
+  if (key) localStorage.removeItem(key)
+}
+
+// ─── Server merge (pointSync.js에서 사용) ─────────────────────────────────────
+
+/**
+ * 서버에서 조회한 포인트 트랜잭션 행을 로컬 원장에 병합한다.
+ * - occurrence_id 기준 중복 제거
+ * - 이미 로컬에 있는 항목은 건드리지 않음
+ * - 새 항목이 추가된 경우 bodyrhythm:ledgerUpdated 이벤트 발행 (UI 갱신)
+ */
+export function mergeEntriesFromServer(serverRows) {
+  if (!serverRows || serverRows.length === 0 || !_currentUserId) return
+  const ledger = getLedger()
+
+  let added = 0
+  for (const row of serverRows) {
+    if (_isDuplicate(row, ledger)) continue
+    ledger.push({
+      id: generateId(),
+      date: row.date,
+      time: resolveTimeStr(row.alarm_id),
+      alarmId: row.alarm_id,
+      alarmLabel: getLabelForAlarm(row.alarm_id),
+      action: row.action,
+      points: row.points,
+      timerSeconds: null,
+      occurrenceId: row.occurrence_id,
+      timestamp: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+      synced: true,
+    })
+    added++
+  }
+
+  if (added > 0) {
+    saveLedger(ledger)
+    try { window.dispatchEvent(new CustomEvent('bodyrhythm:ledgerUpdated')) } catch {}
+  }
+  return added
+}
+
+function _isDuplicate(row, ledger) {
+  const sid = row.occurrence_id
+  // 1. occurrenceId 직접 일치 (강화알람 UUID 또는 이미 병합된 "date__alarmId")
+  if (ledger.some(e => e.occurrenceId === sid)) return true
+  // 2. "date__alarmId" 형식 → 로컬의 occurrenceId=null 항목과 date+alarmId로 비교
+  if (sid && sid.includes('__')) {
+    const sep = sid.indexOf('__')
+    const sDate = sid.slice(0, sep)
+    const sAlarmId = sid.slice(sep + 2)
+    if (ledger.some(e => !e.occurrenceId && e.date === sDate && e.alarmId === sAlarmId)) return true
+  }
+  return false
 }
 
 // ─── Sync helpers (pointSync.js에서 사용) ────────────────────────────────────
