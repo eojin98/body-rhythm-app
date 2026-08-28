@@ -17,7 +17,7 @@ import {
   scheduleTestSnoozeNotification,
 } from './utils/notifications'
 import { syncPendingBoostActions, getActiveTimerState } from './utils/boostAlarm'
-import { syncPointsToServer } from './lib/pointSync'
+import { syncPointsToServer, syncFromServer } from './lib/pointSync'
 import { TEST_HOURLY_BEHAVIORS } from './utils/alarmContent'
 import { recordPoint, POINT_POLICY } from './utils/pointLedger'
 import Onboarding from './pages/Onboarding'
@@ -75,8 +75,11 @@ function AppContent() {
 
   // ─── 포인트 서버 동기화 트리거 ──────────────────────────────────────────────
   // 1) 로그인 성공(user null→non-null) 또는 이미 로그인된 채로 앱 시작 시
+  //    server→local 먼저 (다른 기기 데이터 복원), 완료 후 local→server
   useEffect(() => {
-    if (user) syncPointsToServer()
+    if (user) {
+      syncFromServer(user.id).then(() => syncPointsToServer())
+    }
   }, [user])
 
   // 2) recordPoint가 호출된 직후 (pointLedger.js에서 이벤트 발행)

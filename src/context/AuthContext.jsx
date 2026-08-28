@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { setCurrentUser } from '../utils/pointLedger'
 
 const AuthContext = createContext(null)
 
@@ -11,13 +12,17 @@ export function AuthProvider({ children }) {
     // 앱 시작 시 저장된 세션 복원 (localStorage → 네트워크 없이도 동작)
     supabase.auth.getSession()
       .then(({ data: { session } }) => {
+        // setCurrentUser를 React state 업데이트 전에 동기적으로 호출해,
+        // 이후 렌더에서 컴포넌트가 올바른 계정의 원장을 바라보도록 한다.
+        setCurrentUser(session?.user?.id ?? null)
         setUser(session?.user ?? null)
       })
-      .catch(() => setUser(null))
+      .catch(() => { setCurrentUser(null); setUser(null) })
       .finally(() => setLoading(false))
 
     // 로그인·로그아웃·토큰 갱신 이벤트 구독
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setCurrentUser(session?.user?.id ?? null)
       setUser(session?.user ?? null)
     })
 

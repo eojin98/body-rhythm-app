@@ -140,3 +140,24 @@ export async function openAppNotificationSettings() {
   if (!isNative()) return
   try { await BoostAlarm.openAppNotificationSettings() } catch {}
 }
+
+// ─── SYSTEM_ALERT_WINDOW (Draw over other apps) ──────────────────────────────
+
+/**
+ * Returns { granted: boolean }.
+ * If granted, boost alarms launch as a full-screen Activity even while the device is in use
+ * (instead of heads-up notification which can be swiped away on some Samsung/Xiaomi firmware).
+ */
+export async function checkOverlayPermission() {
+  if (!isNative()) return { granted: false }
+  try { return await BoostAlarm.checkOverlayPermission() } catch { return { granted: false } }
+}
+
+/**
+ * Opens Settings > Apps > [App] > Display over other apps.
+ * The user can grant SYSTEM_ALERT_WINDOW from there.
+ */
+export async function openOverlaySettings() {
+  if (!isNative()) return
+  try { await BoostAlarm.openOverlaySettings() } catch {}
+}

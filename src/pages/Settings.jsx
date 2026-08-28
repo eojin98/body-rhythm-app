@@ -23,6 +23,8 @@ import {
   openFullScreenIntentSettings,
   openAppNotificationSettings,
   scheduleTestBoostAlarm,
+  checkOverlayPermission,
+  openOverlaySettings,
 } from '../utils/boostAlarm'
 import { ALARM_PERIODS, PERIOD_ORDER, getEffectiveBehaviors } from '../utils/alarmContent'
 
@@ -46,6 +48,7 @@ export default function Settings() {
   const [batteryIgnored, setBatteryIgnored] = useState(true)
   const [exactAlarmOk, setExactAlarmOk] = useState(true)
   const [fsiGranted, setFsiGranted] = useState(true)
+  const [overlayGranted, setOverlayGranted] = useState(true)
   const [testAlarmFiring, setTestAlarmFiring] = useState(false)
   const [showPointResetConfirm, setShowPointResetConfirm] = useState(false)
   const [serverPoints, setServerPoints] = useState(null)
@@ -66,16 +69,18 @@ export default function Settings() {
       isBatteryOptIgnored().then(setBatteryIgnored)
       canScheduleExactAlarms().then(setExactAlarmOk)
       checkFullScreenIntentPermission().then(({ granted }) => setFsiGranted(granted))
+      checkOverlayPermission().then(({ granted }) => setOverlayGranted(granted))
     }
   }, [])
 
-  // Re-check OS notification permission and FSI permission when returning from system settings
+  // Re-check OS notification permission and FSI/overlay permissions when returning from system settings
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return
       checkPermissionStatusAsync().then(setNotifStatus)
       if (Capacitor.isNativePlatform()) {
         checkFullScreenIntentPermission().then(({ granted }) => setFsiGranted(granted))
+        checkOverlayPermission().then(({ granted }) => setOverlayGranted(granted))
       }
     }
     document.addEventListener('visibilitychange', onVisible)
@@ -277,6 +282,31 @@ export default function Settings() {
                       }}
                     >
                       허용하기
+                    </button>
+                  </div>
+                )}
+
+                {settings.testMode && !overlayGranted && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0' }}>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600 }}>다른 앱 위에 표시 권한</div>
+                      <div style={{ fontSize: 12, color: '#A0A0B8', marginTop: 2 }}>
+                        미설정 — 폰 사용 중 강화알람이 heads-up으로만 표시됨<br />
+                        설정 시 다른 앱 사용 중에도 전체화면 알람 팝업이 뜹니다
+                      </div>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        await openOverlaySettings()
+                        setTimeout(() => checkOverlayPermission().then(({ granted }) => setOverlayGranted(granted)), 1500)
+                      }}
+                      style={{
+                        background: '#A29BFE', color: 'white', border: 'none',
+                        borderRadius: 10, padding: '8px 14px', fontSize: 13,
+                        fontWeight: 600, cursor: 'pointer', flexShrink: 0,
+                      }}
+                    >
+                      설정하기
                     </button>
                   </div>
                 )}

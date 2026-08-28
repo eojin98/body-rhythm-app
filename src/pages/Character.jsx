@@ -27,6 +27,18 @@ export default function Character() {
   const stage = getEvolutionStage(totalDone)
   const evo = getEvolutionProgress(totalDone)
 
+  // ledger 변경(서버 병합·포인트 적립) 시 포인트 표시 갱신
+  const [, setLedgerTick] = useState(0)
+  useEffect(() => {
+    const refresh = () => setLedgerTick(t => t + 1)
+    window.addEventListener('bodyrhythm:ledgerUpdated', refresh)
+    window.addEventListener('bodyrhythm:pointRecorded', refresh)
+    return () => {
+      window.removeEventListener('bodyrhythm:ledgerUpdated', refresh)
+      window.removeEventListener('bodyrhythm:pointRecorded', refresh)
+    }
+  }, [])
+
   const totalPts  = getTotalPoints()
   const todayPts  = getTodayPoints()
 
