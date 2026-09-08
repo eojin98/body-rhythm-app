@@ -8,6 +8,7 @@ import {
   saveRoutineAction, clearRoutineAction, getSnooze, setSnooze,
   autoMarkMissedRoutines, getCheckinStatus,
 } from '../utils/storage'
+import { recordPoint, removeEntriesForAlarm, POINT_POLICY } from '../utils/pointLedger'
 import {
   getPermissionStatus,
   checkPermissionStatusAsync,
@@ -17,7 +18,6 @@ import {
   showNotification,
 } from '../utils/notifications'
 import { ALARM_PERIODS, getEffectiveBehaviors, TEST_HOURLY_BEHAVIORS, getCurrentPeriodGuide } from '../utils/alarmContent'
-import { recordPoint, POINT_POLICY } from '../utils/pointLedger'
 import { getCurrentHourData, PHASE_COLORS } from '../data/circadianGuide'
 import ProgressRing from '../components/ProgressRing'
 
@@ -148,12 +148,14 @@ export default function Home() {
     if (action === 'done') {
       saveRoutineAction(today, periodId, 'done')
       const isLate = firstFiredAtMs != null && (Date.now() - firstFiredAtMs) > POINT_POLICY.REACTION_DEADLINE_MS
-      recordPoint({ date: today, alarmId: periodId, action: 'normal_complete', points: isLate ? 0 : undefined })
+      recordPoint({ date: today, alarmId: periodId, action: isLate ? 'normal_complete_late' : 'normal_complete', points: isLate ? 0 : undefined })
     } else if (action === 'skipped') {
       saveRoutineAction(today, periodId, 'skipped')
-      // 건너뜀 = 0P → 원장 미기록 (policy 4)
+      // 건너뜀 = 0P. 사유 추적을 위해 0P도 원장에 기록한다(policy 4 변경).
+      recordPoint({ date: today, alarmId: periodId, action: 'normal_skipped', points: 0 })
     } else if (action === 'clear') {
       clearRoutineAction(today, periodId)
+      removeEntriesForAlarm(today, periodId)
     } else if (action === 'snooze') {
       setSnooze(periodId, Date.now() + snoozeMins * 60 * 1000)
       if (periodId.startsWith('test_')) {

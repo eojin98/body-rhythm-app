@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:background="#1A1A2E"
+    android:padding="40dp">
+
+    <!-- Alarm icon -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="🔥"
+        android:textSize="48sp"
+        android:layout_marginBottom="20dp" />
+
+    <!-- Alarm label (e.g. "오전 루틴 알람 🔥") -->
+    <TextView
+        android:id="@+id/tv_alarm_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="루틴 알람"
+        android:textSize="18sp"
+        android:textColor="#A29BFE"
+        android:textStyle="bold"
+        android:letterSpacing="0.08"
+        android:layout_marginBottom="8dp" />
+
+    <!-- Big time display -->
+    <TextView
+        android:id="@+id/tv_alarm_time"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="7:00"
+        android:textSize="80sp"
+        android:textColor="#FFFFFF"
+        android:textStyle="bold"
+        android:includeFontPadding="false"
+        android:layout_marginBottom="12dp" />
+
+    <!-- Behavior title -->
+    <TextView
+        android:id="@+id/tv_alarm_behavior"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text=""
+        android:textSize="15sp"
+        android:textColor="#888AAA"
+        android:gravity="center"
+        android:layout_marginBottom="32dp"
+        android:paddingHorizontal="16dp" />
+
+    <!-- ⏱ Timer button — shown when timerSeconds > 0, hidden while countdown runs -->
+    <Button
+        android:id="@+id/btn_timer"
+        android:layout_width="260dp"
+        android:layout_height="64dp"
+        android:text="⏱  타이머로 실천하기"
+        android:textSize="17sp"
+        android:textStyle="bold"
+        android:textColor="#FFFFFF"
+        android:background="@drawable/btn_boost_timer"
+        android:layout_marginBottom="12dp"
+        android:visibility="gone"
+        android:stateListAnimator="@null" />
+
+    <!-- Normal action buttons (완료 / 나중에 / 건너뜀) — hidden while countdown runs -->
+    <LinearLayout
+        android:id="@+id/ll_action_buttons"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center">
+
+        <!-- ✅ 완료 — primary action, large -->
+        <Button
+            android:id="@+id/btn_done"
+            android:layout_width="260dp"
+            android:layout_height="64dp"
+            android:text="✅  완료"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:textColor="#FFFFFF"
+            android:background="@drawable/btn_boost_done"
+            android:layout_marginBottom="14dp"
+            android:stateListAnimator="@null" />
+
+        <!-- ⏰ 나중에 — secondary action, medium -->
+        <Button
+            android:id="@+id/btn_snooze"
+            android:layout_width="260dp"
+            android:layout_height="52dp"
+            android:text="⏰  나중에 (5분 후)"
+            android:textSize="15sp"
+            android:textColor="#A29BFE"
+            android:background="@drawable/btn_boost_snooze"
+            android:layout_marginBottom="6dp"
+            android:stateListAnimator="@null" />
+
+        <!-- Shown when snooze count ≥ 2 -->
+        <TextView
+            android:id="@+id/tv_snooze_limit"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="나중에는 최대 2회까지만 가능합니다"
+            android:textSize="11sp"
+            android:textColor="#666880"
+            android:layout_marginBottom="10dp"
+            android:visibility="gone" />
+
+        <!-- 건너뜀 — minimal text button, low prominence -->
+        <Button
+            android:id="@+id/btn_skip"
+            android:layout_width="wrap_content"
+            android:layout_height="44dp"
+            android:text="건너뜀"
+            android:textSize="13sp"
+            android:textColor="#555770"
+            android:background="@drawable/btn_boost_skip"
+            android:paddingHorizontal="24dp"
+            android:stateListAnimator="@null" />
+
+    </LinearLayout>
+
+    <!-- Countdown view — visible only while timer is running -->
+    <LinearLayout
+        android:id="@+id/ll_countdown"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="⏱ 타이머 실천 중"
+            android:textSize="16sp"
+            android:textColor="#A29BFE"
+            android:layout_marginBottom="20dp" />
+
+        <TextView
+            android:id="@+id/tv_countdown"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="00:00"
+            android:textSize="72sp"
+            android:textColor="#FFFFFF"
+            android:textStyle="bold"
+            android:fontFamily="monospace"
+            android:layout_marginBottom="36dp" />
+
+        <Button
+            android:id="@+id/btn_timer_cancel"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:text="취소"
+            android:textSize="15sp"
+            android:textColor="#A0A0C0"
+            android:background="@drawable/btn_boost_skip"
+            android:paddingHorizontal="32dp"
+            android:stateListAnimator="@null" />
+
+    </LinearLayout>
+
+</LinearLayout>

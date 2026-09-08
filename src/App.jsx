@@ -5,6 +5,7 @@ import { App as CapApp } from '@capacitor/app'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import LoginPage from './pages/LoginPage'
 import SignupPage from './pages/SignupPage'
+import NicknameSetupPage from './pages/NicknameSetupPage'
 import { getSettings, getTodayKey, saveRoutineAction, setSnooze } from './utils/storage'
 import {
   checkAndFireAlarms,
@@ -33,7 +34,7 @@ import PointHistory from './pages/PointHistory'
 import BottomNav from './components/BottomNav'
 
 function AppContent() {
-  const { user, loading: authLoading } = useAuth()
+  const { user, loading: authLoading, profile, profileLoading, profileError } = useAuth()
   const navigate  = useNavigate()
   const location  = useLocation()
   const [onboardingDone, setOnboardingDone] = useState(() => {
@@ -135,10 +136,11 @@ function AppContent() {
           const isLate = firstFiredAtMs != null && (Date.now() - firstFiredAtMs) > POINT_POLICY.REACTION_DEADLINE_MS
           if (action === 'done') {
             saveRoutineAction(date, periodId, 'done')
-            recordPoint({ date, alarmId: periodId, action: 'normal_complete', points: isLate ? 0 : undefined })
+            recordPoint({ date, alarmId: periodId, action: isLate ? 'normal_complete_late' : 'normal_complete', points: isLate ? 0 : undefined })
           } else if (action === 'skipped') {
             saveRoutineAction(date, periodId, 'skipped')
-            // 건너뜀 = 0P → 원장 미기록 (policy 4)
+            // 건너뜀 = 0P. 사유 추적을 위해 0P도 원장에 기록한다(policy 4 변경).
+            recordPoint({ date, alarmId: periodId, action: 'normal_skipped', points: 0 })
           } else if (action === 'snooze') {
             setSnooze(periodId, Date.now() + snoozeMins * 60 * 1000)
             if (periodId.startsWith('test_')) {
@@ -196,17 +198,20 @@ function AppContent() {
         window.removeEventListener('focus', tick)
       }
     }
-  }, [])
+    // onboardingDone에 의존: 온보딩을 마친 첫 세션에도 리스너/동기화가 등록되도록 함.
+    // 온보딩 완료 전에는 위 early-return으로 아무것도 등록하지 않으므로, 이후
+    // onboardingDone이 true로 바뀌어 재실행돼도 중복 등록되지 않는다.
+  }, [onboardingDone])
 
-  // ─── 인증 로딩 (세션 복원 중, 보통 수십ms) ───────────────────────────────────
-  if (authLoading) {
+  // ─── 인증 로딩 (세션 복원 중, 보통 수십ms) + 프로필 로딩 ─────────────────────
+  if (authLoading || (user && profileLoading)) {
     return (
       <div style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center',
         justifyContent: 'center', height: '100vh', background: 'var(--bg)', gap: 12,
       }}>
         <div style={{ fontSize: 44 }}>⏰</div>
-        <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--primary)' }}>바디리듬</div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--primary)' }}>시간건강</div>
       </div>
     )
   }
@@ -221,6 +226,17 @@ function AppContent() {
         <Route path="*"       element={<Navigate to="/login" replace />} />
       </Routes>
     )
+  }
+
+  // ─── 닉네임 미설정 → 강제 설정 화면 ─────────────────────────────────────────
+  // 서버 조회 성공(profileError=false): profile.nickname이 없으면 강제.
+  // 서버 조회 실패(profileError=true, 오프라인): 로컬 플래그 nicknameSet_{id}로 판단.
+  //   - 플래그 있음(이전에 set_nickname 성공 이력) → 통과
+  //   - 플래그 없음(닉네임 미설정 계정) → NicknameSetupPage 강제
+  // 서버 조회가 성공하면 항상 서버 값 우선(로컬 플래그 무시).
+  const localNicknameSet = profileError && !!localStorage.getItem(`nicknameSet_${user.id}`)
+  if (!profile?.nickname && !localNicknameSet) {
+    return <NicknameSetupPage />
   }
 
   if (!onboardingDone) {

@@ -114,31 +114,31 @@ function resolveTimeStr(alarmId) {
  * @param {object} params
  * @param {string} params.date            - 'yyyy-MM-dd' (실제 알람 발화 날짜)
  * @param {string} params.alarmId         - periodId ('morning', 'test_09' 등)
- * @param {string} params.action          - POINT_ACTIONS 값 중 하나
+ * @param {string} params.action          - POINT_ACTIONS 값 중 하나, 또는 pointsOverride와 함께 쓰는
+ *                                           사유 코드 문자열 (예: 'boost_complete_late')
  * @param {number} [params.timerSeconds]  - boost_timer_complete 시 타이머 실행 시간(초)
- * @param {number} [params.points]        - 직접 지정 시 calcPoints 우선 덮어씀 (0이면 미기록)
- * @param {string|null} [params.occurrenceId] - 강화알람 회차 ID (없으면 date+alarmId로 중복 판정)
+ * @param {number} [params.points]        - 직접 지정 시 calcPoints 우선 덮어씀 (0 지정 시 0P로 기록됨)
+ * @param {string|null} [params.occurrenceId] - 강화알람 회차 ID
  *
  * 정책:
- * - 0P는 원장에 기록하지 않음 (policy 4)
- * - occurrenceId(또는 date+alarmId)가 이미 원장에 있으면 재기록하지 않음 (policy 5)
+ * - 0P도 원장에 기록한다 — 왜 지급되지 않았는지 추적하기 위함(policy 4 변경)
+ * - occurrenceId와 date+alarmId 중 하나라도 이미 원장에 있으면 재기록하지 않음 (policy 5)
  */
 export function recordPoint({ date, alarmId, action, timerSeconds = null, points: pointsOverride = undefined, occurrenceId = null }) {
   // 로그인 안 된 상태에서는 포인트 미기록 (알람 동작은 정상, 포인트만 건너뜀)
   if (!_currentUserId) return
-  if (!(action in POINT_VALUES)) return
+  // pointsOverride가 없을 때만 calcPoints를 위해 action이 알려진 값인지 검사한다.
+  // pointsOverride가 주어진 호출(사유 코드 action, 0P 포함)은 calcPoints를 쓰지 않으므로 통과시킨다.
+  if (pointsOverride === undefined && !(action in POINT_VALUES)) return
 
   const points = pointsOverride !== undefined ? pointsOverride : calcPoints(action, timerSeconds)
 
-  // Policy 4: 0P는 원장 미기록 (건너뜀·지각완료 등)
-  if (points === 0) return
-
   const ledger = getLedger()
 
-  // Policy 5: 회차당 1회 지급 (occurrenceId 우선, fallback: date+alarmId)
-  const alreadyExists = occurrenceId
-    ? ledger.some(e => e.occurrenceId === occurrenceId)
-    : ledger.some(e => e.date === date && e.alarmId === alarmId)
+  // Policy 5: 회차당 1회 지급. occurrenceId 형식이 경로마다 달라(강화알람 vs 수동/일반)
+  // 서로를 못 알아보는 일이 없도록 date+alarmId는 항상 검사하고, occurrenceId가 있으면 추가로 검사한다.
+  const alreadyExists = ledger.some(e => e.date === date && e.alarmId === alarmId)
+    || (occurrenceId != null && ledger.some(e => e.occurrenceId === occurrenceId))
   if (alreadyExists) return
 
   ledger.push({
@@ -206,6 +206,30 @@ export function getEntriesByDate(dateKey) {
 export function clearLedger() {
   const key = ledgerKey()
   if (key) localStorage.removeItem(key)
+}
+
+/**
+ * 완료 취소(clear) 시 해당 알람의 포인트 원장 항목을 함께 제거한다.
+ * 이미 서버에 동기화된(synced:true) 항목도 로컬에서는 제거하되, 서버 데이터는 건드리지 않는다
+ * (서버 삭제 API를 호출하지 않음) — 대신 콘솔에 남겨 추후 추적할 수 있게 한다.
+ */
+export function removeEntriesForAlarm(date, alarmId) {
+  const ledger = getLedger()
+  const toRemove = ledger.filter(e => e.date === date && e.alarmId === alarmId)
+  if (toRemove.length === 0) return
+
+  const stillSyncedOnServer = toRemove.filter(e => e.synced)
+  if (stillSyncedOnServer.length > 0) {
+    console.warn(
+      '[pointLedger] removeEntriesForAlarm: 서버에 이미 동기화된 항목을 로컬에서만 제거합니다 (서버는 변경하지 않음):',
+      stillSyncedOnServer.map(e => ({ id: e.id, occurrenceId: e.occurrenceId, date: e.date, alarmId: e.alarmId })),
+    )
+  }
+
+  const remaining = ledger.filter(e => !(e.date === date && e.alarmId === alarmId))
+  saveLedger(remaining)
+
+  try { window.dispatchEvent(new CustomEvent('bodyrhythm:ledgerUpdated')) } catch {}
 }
 
 // ─── Server merge (pointSync.js에서 사용) ─────────────────────────────────────

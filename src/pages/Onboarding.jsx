@@ -73,7 +73,7 @@ function WelcomeStep({ onNext }) {
       <div className="onboarding-hero">
         <div style={{ fontSize: 64, marginBottom: 16 }}>⏰</div>
         <h1 style={{ fontSize: 26, fontWeight: 800, marginBottom: 10, letterSpacing: -0.5 }}>
-          Body Rhythm
+          시간건강
         </h1>
         <p style={{ fontSize: 15, opacity: 0.85, lineHeight: 1.6, maxWidth: 280 }}>
           규칙적인 생활 리듬으로<br />더 건강한 하루를 만들어요

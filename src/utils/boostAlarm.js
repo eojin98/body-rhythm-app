@@ -88,20 +88,39 @@ export async function syncPendingBoostActions() {
     const { actions } = await BoostAlarm.getPendingActions()
     const list = JSON.parse(actions || '[]')
     const now = Date.now()
-    for (const { periodId, date, action, timerSeconds, firedAt, occurrenceId = null } of list) {
-      // 15분(REACTION_DEADLINE_MS) 초과 응답: 루틴 기록은 정상 저장, 포인트는 0(미기록)
+    for (const { periodId, date, action, timerSeconds, firedAt, respondedAt, occurrenceId = null } of list) {
+      // 15분(REACTION_DEADLINE_MS) 기준 시각은 "사용자가 버튼을 누른 시각"(respondedAt) —
+      // 앱을 나중에 열어 이 동기화가 실행되는 시각(now)을 기준으로 삼으면, 제때 반응한 사용자도
+      // 앱을 늦게 열었다는 이유만으로 지각 처리될 수 있다.
+      // respondedAt이 없는 구버전 pending action만 now로 폴백하고, 그 사실을 사유 코드에 남긴다.
+      const usedLegacyFallback = respondedAt == null
+      const respondedAtMs = usedLegacyFallback ? now : respondedAt
       // timer_complete는 타이머 실행 시간(timerSeconds)만큼 허용 시간을 추가 부여
       const timerExtra = action === 'timer_complete' ? (timerSeconds || 0) * 1000 : 0
-      const isLate = firedAt != null && (now - firedAt) > POINT_POLICY.REACTION_DEADLINE_MS + timerExtra
+      const isLate = firedAt != null && (respondedAtMs - firedAt) > POINT_POLICY.REACTION_DEADLINE_MS + timerExtra
+      const legacySuffix = isLate && usedLegacyFallback ? '_legacy' : ''
       if (action === 'done') {
         saveRoutineAction(date, periodId, 'done')
-        recordPoint({ date, alarmId: periodId, action: 'boost_complete', occurrenceId, points: isLate ? 0 : undefined })
+        recordPoint({
+          date, alarmId: periodId,
+          action: isLate ? `boost_complete_late${legacySuffix}` : 'boost_complete',
+          occurrenceId, points: isLate ? 0 : undefined,
+        })
       } else if (action === 'timer_complete') {
         saveRoutineAction(date, periodId, 'done')
-        recordPoint({ date, alarmId: periodId, action: 'boost_timer_complete', timerSeconds: isLate ? null : timerSeconds, occurrenceId, points: isLate ? 0 : undefined })
+        recordPoint({
+          date, alarmId: periodId,
+          action: isLate ? `boost_timer_complete_late${legacySuffix}` : 'boost_timer_complete',
+          timerSeconds: isLate ? null : timerSeconds, occurrenceId, points: isLate ? 0 : undefined,
+        })
       } else if (action === 'skipped') {
         saveRoutineAction(date, periodId, 'skipped')
-        // 건너뜀 = 0P → 원장 미기록 (policy 4). 회차 종결은 AlarmOccurrenceStatus가 보장.
+        // 건너뜀 = 0P. 사유 추적을 위해 0P도 원장에 기록한다(policy 4 변경).
+        recordPoint({ date, alarmId: periodId, action: 'boost_skipped', occurrenceId, points: 0 })
+      } else if (action === 'timeout') {
+        saveRoutineAction(date, periodId, 'skipped')
+        // 60초 무응답 자동 종료 — 사용자가 직접 건너뛴 것과 구분해서 기록한다.
+        recordPoint({ date, alarmId: periodId, action: 'boost_timeout', occurrenceId, points: 0 })
       }
     }
   } catch (e) {

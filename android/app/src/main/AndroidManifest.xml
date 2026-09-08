@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme">
+
+        <!-- ── Main Capacitor Activity ── -->
+        <activity
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
+            android:name=".MainActivity"
+            android:label="@string/title_activity_main"
+            android:theme="@style/AppTheme.NoActionBarLaunch"
+            android:launchMode="singleTask"
+            android:exported="true">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+        </activity>
+
+        <!-- ── Boost Alarm: full-screen overlay shown on lock screen ── -->
+        <!--
+            launchMode="singleInstance": prevents stacking multiple instances when snooze fires.
+            showWhenLocked / turnScreenOn handled in code for API 24-26 compatibility;
+            the Theme.BoostAlarm sets windowFullscreen for the visual look.
+        -->
+        <activity
+            android:name=".BoostAlarmActivity"
+            android:exported="false"
+            android:launchMode="singleInstance"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.BoostAlarm"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true" />
+
+        <!-- ── Boost Alarm: foreground service (plays sound + creates FSI notification) ── -->
+        <!--
+            foregroundServiceType="mediaPlayback": required on API 29+.
+            On Android 14 (API 34) this also requires FOREGROUND_SERVICE_MEDIA_PLAYBACK permission.
+            USAGE_ALARM AudioAttribute means the sound plays on STREAM_ALARM regardless of
+            ringer mode, matching the behaviour of stock alarm-clock apps.
+        -->
+        <service
+            android:name=".BoostAlarmService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+
+        <!-- ── Boost Alarm: receives AlarmManager broadcasts ── -->
+        <receiver
+            android:name=".BoostAlarmReceiver"
+            android:exported="false" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths"></meta-data>
+        </provider>
+    </application>
+
+    <!-- ── Permissions ── -->
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!--
+        SYSTEM_ALERT_WINDOW (Draw over other apps):
+        Optional but recommended for boost alarms. When granted, BoostAlarmActivity launches
+        directly as a full-screen overlay even while the device is in active use, instead of
+        degrading to a heads-up notification that can be swiped away on some OEM firmwares.
+        The user grants this at: Settings > Apps > [App] > Display over other apps.
+        BoostAlarmPlugin.openOverlaySettings() navigates there directly.
+    -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <!--
+        USE_FULL_SCREEN_INTENT:
+        - API < 34: automatically granted, no user action needed.
+        - API 34+ (Android 14+): "restricted" by default for apps that aren't alarm-clock /
+          call apps. The user must manually allow it at:
+          Settings > Apps > [App] > Notifications > Allow full-screen intents
+          Use BoostAlarmPlugin.checkFullScreenIntentPermission() / openFullScreenIntentSettings()
+          to detect and guide the user.
+    -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+
+    <!--
+        FOREGROUND_SERVICE_MEDIA_PLAYBACK:
+        Required on Android 14+ (API 34) when the service declares
+        android:foregroundServiceType="mediaPlayback".
+        This is a normal (install-time granted) permission — no runtime prompt needed.
+    -->
+    <uses-permission
+        android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+        android:minSdkVersion="34" />
+
+</manifest>

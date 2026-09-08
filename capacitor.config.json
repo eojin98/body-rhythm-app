@@ -1,6 +1,6 @@
 {
   "appId": "com.rlrc.bodyrhythm",
-  "appName": "Body Rhythm 알람",
+  "appName": "시간건강",
   "webDir": "dist",
   "server": {
     "androidScheme": "https"

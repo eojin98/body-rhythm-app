@@ -1,5 +1,14 @@
 node_modules
-android/
 .env
 .env.local
 .env.*.local
+
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/app/release/
+android/app/debug/
+*.keystore
+*.jks
