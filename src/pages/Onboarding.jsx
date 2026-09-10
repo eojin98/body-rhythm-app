@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { getSettings, saveSettings } from '../utils/storage'
 import { requestNotificationPermission } from '../utils/notifications'
 import TimeInputField from '../components/TimeInputField'
@@ -6,6 +7,7 @@ import TimeInputField from '../components/TimeInputField'
 const STEPS = ['환영', '기상 시간', '취침 시간', '알림 설정', '완료']
 
 export default function Onboarding({ onComplete }) {
+  const navigate = useNavigate()
   const [step, setStep] = useState(0)
   const [wakeTime, setWakeTime] = useState('07:00')
   const [sleepTime, setSleepTime] = useState('23:00')
@@ -36,6 +38,8 @@ export default function Onboarding({ onComplete }) {
       alarms: updatedAlarms,
     })
     onComplete()
+    // 온보딩 마지막 단계 다음은 홈이 아니라 캐릭터 선택 — 완료 처리 자체는 위에서 그대로 수행됨
+    navigate('/character-setup')
   }
 
   return (

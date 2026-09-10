@@ -6,6 +6,7 @@ import { AuthProvider, useAuth } from './context/AuthContext'
 import LoginPage from './pages/LoginPage'
 import SignupPage from './pages/SignupPage'
 import NicknameSetupPage from './pages/NicknameSetupPage'
+import CharacterSetupPage from './pages/CharacterSetupPage'
 import { getSettings, getTodayKey, saveRoutineAction, setSnooze } from './utils/storage'
 import {
   checkAndFireAlarms,
@@ -243,6 +244,18 @@ function AppContent() {
     return <Onboarding onComplete={() => setOnboardingDone(true)} />
   }
 
+  // ─── 캐릭터 미설정 → 강제 설정 화면 ─────────────────────────────────────────
+  // 닉네임 게이트와 완전히 동일한 패턴.
+  // 서버 조회 성공(profileError=false): profile.character_id가 없으면 강제.
+  // 서버 조회 실패(profileError=true, 오프라인): 로컬 플래그 characterSet_{id}로 판단.
+  //   - 플래그 있음(이전에 set_character 성공 이력) → 통과
+  //   - 플래그 없음(캐릭터 미설정 계정) → CharacterSetupPage 강제
+  // 서버 조회가 성공하면 항상 서버 값 우선(로컬 플래그 무시).
+  const localCharacterSet = profileError && !!localStorage.getItem(`characterSet_${user.id}`)
+  if (!profile?.character_id && !localCharacterSet) {
+    return <CharacterSetupPage />
+  }
+
   return (
     <>
       {activeTimer && timerDisplay && (
@@ -273,10 +286,11 @@ function AppContent() {
           <Route path="/health-records" element={<HealthRecords />} />
           <Route path="/hourly-alarm-edit" element={<HourlyAlarmEdit />} />
           <Route path="/point-history" element={<PointHistory />} />
+          <Route path="/character-setup" element={<CharacterSetupPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
-      {location.pathname !== '/checkin' && location.pathname !== '/circadian-detail' && location.pathname !== '/hourly-alarm-edit' && location.pathname !== '/point-history' && <BottomNav />}
+      {location.pathname !== '/checkin' && location.pathname !== '/circadian-detail' && location.pathname !== '/hourly-alarm-edit' && location.pathname !== '/point-history' && location.pathname !== '/character-setup' && <BottomNav />}
 
       {/* ─── 앱 종료 확인 팝업 ─────────────────────────────────────────── */}
       {exitConfirmVisible && (
