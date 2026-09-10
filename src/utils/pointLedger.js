@@ -122,7 +122,9 @@ function resolveTimeStr(alarmId) {
  *
  * 정책:
  * - 0P도 원장에 기록한다 — 왜 지급되지 않았는지 추적하기 위함(policy 4 변경)
- * - occurrenceId와 date+alarmId 중 하나라도 이미 원장에 있으면 재기록하지 않음 (policy 5)
+ * - 같은 회차(occurrenceId 또는 date+alarmId)에 이미 지급된(>0P) 항목이 있으면 재기록하지 않음 (policy 5)
+ * - 같은 회차에 0P 항목만 있고 이번에 정상 지급될 값이 들어오면, 신규 행을 만들지 않고
+ *   그 0P 항목을 새 값으로 교체한다 (예: boost_timeout 0P → 수동 완료로 정상 지급)
  */
 export function recordPoint({ date, alarmId, action, timerSeconds = null, points: pointsOverride = undefined, occurrenceId = null }) {
   // 로그인 안 된 상태에서는 포인트 미기록 (알람 동작은 정상, 포인트만 건너뜀)
@@ -137,9 +139,43 @@ export function recordPoint({ date, alarmId, action, timerSeconds = null, points
 
   // Policy 5: 회차당 1회 지급. occurrenceId 형식이 경로마다 달라(강화알람 vs 수동/일반)
   // 서로를 못 알아보는 일이 없도록 date+alarmId는 항상 검사하고, occurrenceId가 있으면 추가로 검사한다.
-  const alreadyExists = ledger.some(e => e.date === date && e.alarmId === alarmId)
-    || (occurrenceId != null && ledger.some(e => e.occurrenceId === occurrenceId))
-  if (alreadyExists) return
+  const matches = ledger.filter(e =>
+    (e.date === date && e.alarmId === alarmId)
+    || (occurrenceId != null && e.occurrenceId === occurrenceId)
+  )
+
+  if (matches.length > 0) {
+    // 이미 지급된(>0P) 항목이 있으면 재지급하지 않는다 — 이중 지급 차단
+    if (matches.some(e => (e.points || 0) > 0)) return
+    // 기존이 0P인데 이번도 0P면 남길 게 없다 (사유 항목은 이미 존재)
+    if (points <= 0) return
+
+    // 0P 항목만 있고 이번에 정상 지급 → 기존 0P 항목을 교체한다 (신규 행 추가 아님)
+    const target = matches[0]
+    if (target.synced) {
+      // 이 항목은 구버전 빌드가 0P 상태로 서버에 올린 것이다. 서버 upsert는
+      // ignoreDuplicates라 같은 occurrence_id의 기존 0P 행을 갱신하지 못하므로
+      // 이 건에 한해 서버 값이 0P로 남는다 (서버 데이터는 건드리지 않는 정책).
+      console.warn(
+        '[pointLedger] 서버에 0P로 이미 올라간 항목을 로컬에서 교체합니다. 이 건은 서버 값이 0P로 남습니다:',
+        { id: target.id, occurrenceId: target.occurrenceId, date: target.date, alarmId: target.alarmId },
+      )
+    }
+    target.action       = action
+    target.points       = points
+    target.timerSeconds = timerSeconds
+    // occurrenceId는 기존 값을 유지하되, 기존이 없고 새 값이 있으면 채운다
+    if (target.occurrenceId == null && occurrenceId != null) target.occurrenceId = occurrenceId
+    target.timestamp    = Date.now()
+    target.synced       = false   // 서버에 다시 올라가도록 되돌림
+
+    saveLedger(ledger)
+
+    try { window.dispatchEvent(new CustomEvent('bodyrhythm:ledgerUpdated')) } catch {}
+    // sync 트리거 (App.jsx에서 구독) — 이 이벤트가 없으면 교체분이 서버로 올라가지 않는다
+    try { window.dispatchEvent(new CustomEvent('bodyrhythm:pointRecorded')) } catch {}
+    return
+  }
 
   ledger.push({
     id: generateId(),
@@ -237,6 +273,8 @@ export function removeEntriesForAlarm(date, alarmId) {
 /**
  * 서버에서 조회한 포인트 트랜잭션 행을 로컬 원장에 병합한다.
  * - occurrence_id 기준 중복 제거
+ * - 0P 행은 병합하지 않음 (0P는 로컬 감사 기록 영역 — getUnsyncedEntries 참고).
+ *   구버전 빌드가 올려둔 0P 행이 다시 내려와 로컬에 유령 항목으로 쌓이는 것을 막는다.
  * - 이미 로컬에 있는 항목은 건드리지 않음
  * - 새 항목이 추가된 경우 bodyrhythm:ledgerUpdated 이벤트 발행 (UI 갱신)
  */
@@ -246,6 +284,7 @@ export function mergeEntriesFromServer(serverRows) {
 
   let added = 0
   for (const row of serverRows) {
+    if ((row.points || 0) <= 0) continue
     if (_isDuplicate(row, ledger)) continue
     ledger.push({
       id: generateId(),
@@ -286,9 +325,16 @@ function _isDuplicate(row, ledger) {
 
 // ─── Sync helpers (pointSync.js에서 사용) ────────────────────────────────────
 
-/** 아직 서버에 올라가지 않은 원장 항목 목록 */
+/**
+ * 아직 서버에 올라가지 않은 원장 항목 목록.
+ *
+ * 0P 항목은 서버로 보내지 않는다. 서버 합계에는 기여하지 않으면서 occurrence_id만
+ * 선점해버리기 때문인데, 그러면 같은 회차가 나중에 정상 지급될 때 pointSync의
+ * upsert(ignoreDuplicates)가 기존 0P 행을 갱신하지 못해 로컬·서버 총점이 어긋난다.
+ * 0P는 "왜 지급되지 않았는지" 추적하기 위한 로컬 감사 기록으로만 남는다.
+ */
 export function getUnsyncedEntries() {
-  return getLedger().filter(e => !e.synced)
+  return getLedger().filter(e => !e.synced && (e.points || 0) > 0)
 }
 
 /** ids 에 해당하는 항목을 synced: true 로 표시 */

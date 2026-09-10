@@ -1,33 +1,37 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getRecords, getSettings, saveSettings } from '../utils/storage'
+import { useAuth } from '../context/AuthContext'
+import { getRecords } from '../utils/storage'
 import {
   getTotalDone, getCurrentStreak, getWeekAvgScore, getTodayScore,
-  getConditionScore, getCondition, getEvolutionStage, getEvolutionProgress,
+  getConditionScore, getMood, MOODS,
+  getStage, getStageProgress, getCharacterImage,
   getAcknowledgedStage, setAcknowledgedStage,
 } from '../utils/characterLogic'
 import { getTotalPoints, getTodayPoints } from '../utils/pointLedger'
 
+const CHAR_IMG_HEIGHT = 200 // 컨테이너 높이 고정 — 하단 정렬 이미지가 단계/상태별로 바뀌어도 위아래로 튀지 않게
+
 export default function Character() {
   const navigate = useNavigate()
+  const { profile } = useAuth()
   const [records] = useState(() => getRecords())
-  const [settings, setSettings] = useState(() => getSettings())
-  const [editingName, setEditingName] = useState(false)
-  const [nameInput, setNameInput] = useState('')
   const [showEvolveAnim, setShowEvolveAnim] = useState(false)
   const [evolvedStage, setEvolvedStage] = useState(null)
+  const [imgError, setImgError] = useState(false)
 
-  const characterName = settings.characterName || '바디'
+  const characterId = profile?.character_id ?? null
+  const characterName = profile?.character_name ?? ''
+
   const totalDone = getTotalDone(records)
   const streak = getCurrentStreak(records)
   const weekAvg = getWeekAvgScore(records)
   const todayScore = getTodayScore(records)
   const conditionScore = getConditionScore(records)
-  const condition = getCondition(conditionScore)
-  const stage = getEvolutionStage(totalDone)
-  const evo = getEvolutionProgress(totalDone)
+  const mood = getMood(conditionScore)
+  const moodDef = MOODS.find(m => m.mood === mood) ?? MOODS[MOODS.length - 1]
 
-  // ledger 변경(서버 병합·포인트 적립) 시 포인트 표시 갱신
+  // ledger 변경(서버 병합·포인트 적립) 시 포인트/단계 표시 갱신
   const [, setLedgerTick] = useState(0)
   useEffect(() => {
     const refresh = () => setLedgerTick(t => t + 1)
@@ -39,45 +43,45 @@ export default function Character() {
     }
   }, [])
 
-  const totalPts  = getTotalPoints()
-  const todayPts  = getTodayPoints()
+  const totalPts = getTotalPoints()
+  const todayPts = getTodayPoints()
+  const stage = getStage(totalPts)
+  const stageProgress = getStageProgress(totalPts)
+  const characterImage = getCharacterImage(characterId, stage, mood)
+
+  // characterImage(주소)가 바뀌면(단계/상태 변화 등) 이전 로드 실패 상태를 초기화
+  useEffect(() => { setImgError(false) }, [characterImage])
 
   useEffect(() => {
     const lastStage = getAcknowledgedStage()
-    if (stage.stage > lastStage) {
+    if (stage > lastStage) {
       setEvolvedStage(stage)
       setShowEvolveAnim(true)
-      setAcknowledgedStage(stage.stage)
+      setAcknowledgedStage(stage)
       const t = setTimeout(() => setShowEvolveAnim(false), 2800)
       return () => clearTimeout(t)
     }
   }, [])
 
-  const handleSaveName = () => {
-    const trimmed = nameInput.trim()
-    if (!trimmed) return
-    const updated = { ...settings, characterName: trimmed }
-    saveSettings(updated)
-    setSettings(updated)
-    setEditingName(false)
-  }
-
-  const startEditName = () => {
-    setNameInput(characterName)
-    setEditingName(true)
-  }
+  const evolvedImage = evolvedStage != null ? getCharacterImage(characterId, evolvedStage, mood) : null
 
   return (
     <div className="page fade-up">
       {/* ── Evolution overlay ── */}
-      {showEvolveAnim && evolvedStage && (
+      {showEvolveAnim && evolvedStage != null && (
         <div className="evolve-overlay" onClick={() => setShowEvolveAnim(false)}>
-          <div className="evolve-emoji">{evolvedStage.emoji}</div>
-          <div className="evolve-title">
-            {evolvedStage.badge && <span style={{ marginRight: 6 }}>{evolvedStage.badge}</span>}
-            진화했어요!
-          </div>
-          <div className="evolve-sub">{evolvedStage.name}(으)로 성장했어요</div>
+          {evolvedImage ? (
+            <img
+              src={evolvedImage}
+              alt=""
+              style={{ height: 140, width: 'auto', objectFit: 'contain' }}
+              onError={e => { e.currentTarget.style.display = 'none' }}
+            />
+          ) : (
+            <div className="evolve-emoji">🎉</div>
+          )}
+          <div className="evolve-title">진화했어요!</div>
+          <div className="evolve-sub">{evolvedStage}단계로 성장했어요</div>
           <div style={{ marginTop: 20, fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>탭하여 닫기</div>
         </div>
       )}
@@ -94,59 +98,29 @@ export default function Character() {
           background: 'linear-gradient(135deg, #F5F4FF 0%, #EDE9FF 100%)',
           borderRadius: 24, padding: '32px 24px', textAlign: 'center',
         }}>
-          <div style={{ fontSize: 96, lineHeight: 1, marginBottom: 16, userSelect: 'none' }}>
-            {stage.emoji}
+          <div style={{
+            height: CHAR_IMG_HEIGHT, display: 'flex', alignItems: 'flex-end',
+            justifyContent: 'center', marginBottom: 16,
+          }}>
+            {characterImage && !imgError ? (
+              <img
+                src={characterImage}
+                alt={characterName || '캐릭터'}
+                onError={() => setImgError(true)}
+                style={{ height: '100%', width: 'auto', maxWidth: '100%', objectFit: 'contain' }}
+              />
+            ) : (
+              <div style={{ fontSize: 72, lineHeight: 1, userSelect: 'none' }}>🐾</div>
+            )}
           </div>
 
-          {/* Name row */}
-          {editingName ? (
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center' }}>
-              <input
-                value={nameInput}
-                onChange={e => setNameInput(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') handleSaveName() }}
-                maxLength={10}
-                autoFocus
-                style={{
-                  fontSize: 20, fontWeight: 700, textAlign: 'center',
-                  border: '2px solid #6C5CE7', borderRadius: 10, padding: '4px 12px',
-                  outline: 'none', color: '#1E1E2E', background: 'white', width: 130,
-                  fontFamily: 'inherit',
-                }}
-              />
-              <button
-                onClick={handleSaveName}
-                style={{
-                  background: '#6C5CE7', color: 'white', border: 'none',
-                  borderRadius: 8, padding: '6px 12px', fontWeight: 700,
-                  cursor: 'pointer', fontSize: 13, fontFamily: 'inherit',
-                }}
-              >저장</button>
-              <button
-                onClick={() => setEditingName(false)}
-                style={{
-                  background: '#EEEEEE', color: '#888', border: 'none',
-                  borderRadius: 8, padding: '6px 12px', cursor: 'pointer',
-                  fontSize: 13, fontFamily: 'inherit',
-                }}
-              >취소</button>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-              <span style={{
-                fontSize: 24, fontWeight: 800, color: '#1E1E2E',
-                maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              }}>{characterName}</span>
-              <button
-                onClick={startEditName}
-                style={{
-                  background: 'none', border: '1px solid #D0CFEE', borderRadius: 6,
-                  padding: '2px 10px', color: '#A0A0B8', cursor: 'pointer',
-                  fontSize: 12, fontFamily: 'inherit', flexShrink: 0,
-                }}
-              >변경</button>
-            </div>
-          )}
+          <div style={{
+            fontSize: 24, fontWeight: 800, color: '#1E1E2E',
+            maxWidth: 220, margin: '0 auto', overflow: 'hidden',
+            textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {characterName || '캐릭터'}
+          </div>
         </div>
       </div>
 
@@ -193,12 +167,9 @@ export default function Character() {
             <span style={{ fontWeight: 700, fontSize: 15, color: '#1E1E2E' }}>오늘 컨디션</span>
             <span style={{ fontSize: 13, color: '#A0A0B8' }}>{conditionScore}점</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-            <span style={{ fontSize: 30, userSelect: 'none' }}>{condition.emoji}</span>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: 15, color: '#6C5CE7', marginBottom: 2 }}>{condition.label}</div>
-              <div style={{ fontSize: 13, color: '#6E6E8A', lineHeight: 1.5 }}>{condition.message}</div>
-            </div>
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontWeight: 700, fontSize: 15, color: '#6C5CE7', marginBottom: 2 }}>{moodDef.label}</div>
+            <div style={{ fontSize: 13, color: '#6E6E8A', lineHeight: 1.5 }}>{moodDef.message}</div>
           </div>
           <div style={{ background: '#F5F5FA', borderRadius: 8, height: 8, overflow: 'hidden' }}>
             <div style={{
@@ -210,31 +181,31 @@ export default function Character() {
         </div>
       </div>
 
-      {/* ── Evolution progress ── */}
+      {/* ── Growth progress ── */}
       <div className="section" style={{ paddingTop: 0 }}>
-        {evo.next !== null ? (
+        {stageProgress.next !== null ? (
           <div className="card" style={{ padding: '18px 20px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-              <span style={{ fontWeight: 700, fontSize: 15, color: '#1E1E2E' }}>다음 진화까지</span>
-              <span style={{ fontSize: 13, color: '#A0A0B8' }}>앞으로 {evo.toNext}회</span>
+              <span style={{ fontWeight: 700, fontSize: 15, color: '#1E1E2E' }}>다음 성장까지</span>
+              <span style={{ fontSize: 13, color: '#A0A0B8' }}>{stageProgress.toNext.toLocaleString()}P 남음</span>
             </div>
             <div style={{ background: '#F5F5FA', borderRadius: 8, height: 10, overflow: 'hidden', marginBottom: 8 }}>
               <div style={{
-                width: `${evo.progress}%`, height: '100%',
+                width: `${stageProgress.progress}%`, height: '100%',
                 background: 'linear-gradient(90deg, #FDCB6E, #E17055)',
                 borderRadius: 8, transition: 'width 0.6s ease',
               }} />
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 12, color: '#A0A0B8' }}>현재 {totalDone}회</span>
-              <span style={{ fontSize: 12, color: '#A0A0B8' }}>목표 {evo.next}회</span>
+              <span style={{ fontSize: 12, color: '#A0A0B8' }}>현재 {totalPts.toLocaleString()}P</span>
+              <span style={{ fontSize: 12, color: '#A0A0B8' }}>목표 {stageProgress.next.toLocaleString()}P</span>
             </div>
           </div>
         ) : (
           <div className="card" style={{ padding: '18px 20px', textAlign: 'center' }}>
             <div style={{ fontSize: 28, marginBottom: 6 }}>🏆</div>
             <div style={{ fontWeight: 700, fontSize: 15, color: '#6C5CE7' }}>최고 단계 달성!</div>
-            <div style={{ fontSize: 13, color: '#888', marginTop: 4 }}>총 {totalDone}번 완료했어요</div>
+            <div style={{ fontSize: 13, color: '#888', marginTop: 4 }}>총 {totalPts.toLocaleString()}P 획득했어요</div>
           </div>
         )}
       </div>

@@ -72,40 +72,50 @@ export function getConditionScore(records) {
   return Math.round(todayScore * 0.4 + weekAvg * 0.3 + streakScore * 0.2 + totalScore * 0.1)
 }
 
-// ─── Condition levels ─────────────────────────────────────────────────────────
-
-export const CONDITIONS = [
-  { minScore: 85, level: 'excellent', label: '최상', emoji: '✨', message: '오늘도 완벽해요! 바디가 신나있어요' },
-  { minScore: 65, level: 'good',      label: '좋음', emoji: '😸', message: '컨디션이 좋아요. 이 페이스 유지해요!' },
-  { minScore: 45, level: 'normal',    label: '보통', emoji: '😺', message: '나쁘지 않아요. 오늘 하나만 더 해볼까요?' },
-  { minScore: 25, level: 'low',       label: '낮음', emoji: '😿', message: '조금 지친 것 같아요. 쉬어도 괜찮아요' },
-  { minScore: 0,  level: 'rest',      label: '휴식', emoji: '😴', message: '바디가 기다리고 있어요. 오늘부터 다시 시작!' },
+// ─── Mood levels (상태, 3단계) ──────────────────────────────────────────────────
+// 구간 경계값은 이 배열 한 곳에서만 관리한다.
+export const MOODS = [
+  { mood: 1, minScore: 70, label: '활발', message: '오늘도 팔팔해요! 이 페이스를 유지해요' },
+  { mood: 2, minScore: 40, label: '보통', message: '나쁘지 않아요. 오늘 하나만 더 해볼까요?' },
+  { mood: 3, minScore: 0,  label: '지침', message: '조금 지친 것 같아요. 쉬어도 괜찮아요' },
 ]
 
-export function getCondition(conditionScore) {
-  return CONDITIONS.find(c => conditionScore >= c.minScore) ?? CONDITIONS[CONDITIONS.length - 1]
+export function getMood(score) {
+  return (MOODS.find(m => score >= m.minScore) ?? MOODS[MOODS.length - 1]).mood
 }
 
-// ─── Evolution stages ─────────────────────────────────────────────────────────
-
-export const EVOLUTION_STAGES = [
-  { minTotal: 100, stage: 2, name: '바디 맥스', emoji: '🐈‍⬛', badge: '👑', description: '전설의 고양이로 진화했어요!' },
-  { minTotal: 30,  stage: 1, name: '바디',      emoji: '🐈',   badge: '⭐', description: '성장하고 있는 바디예요' },
-  { minTotal: 0,   stage: 0, name: '아기 바디', emoji: '🐱',   badge: '',   description: '이제 막 태어난 바디예요' },
+// ─── Growth stages (성장 단계, 5단계) ───────────────────────────────────────────
+// 임계값은 이 배열 한 곳에서만 관리한다. 기준: pointLedger.getTotalPoints()의 누적 포인트.
+export const GROWTH_STAGES = [
+  { stage: 1, minPoints: 0 },
+  { stage: 2, minPoints: 150 },
+  { stage: 3, minPoints: 500 },
+  { stage: 4, minPoints: 1500 },
+  { stage: 5, minPoints: 3500 },
 ]
 
-export function getEvolutionStage(totalDone) {
-  return EVOLUTION_STAGES.find(s => totalDone >= s.minTotal) ?? EVOLUTION_STAGES[EVOLUTION_STAGES.length - 1]
+export function getStage(totalPoints) {
+  const matched = GROWTH_STAGES.filter(s => totalPoints >= s.minPoints)
+  return (matched.length ? matched[matched.length - 1] : GROWTH_STAGES[0]).stage
 }
 
-export function getEvolutionProgress(totalDone) {
-  const thresholds = [0, 30, 100]
-  const idx = totalDone >= 100 ? 2 : totalDone >= 30 ? 1 : 0
-  if (idx === 2) return { progress: 100, current: totalDone, next: null, toNext: 0 }
-  const from = thresholds[idx]
-  const to = thresholds[idx + 1]
-  const progress = Math.min(100, Math.round(((totalDone - from) / (to - from)) * 100))
-  return { progress, current: totalDone, next: to, toNext: to - totalDone }
+export function getStageProgress(totalPoints) {
+  const currentStage = getStage(totalPoints)
+  const currentDef = GROWTH_STAGES.find(s => s.stage === currentStage)
+  const nextDef = GROWTH_STAGES.find(s => s.stage === currentStage + 1)
+  if (!nextDef) return { progress: 100, toNext: 0, next: null }
+  const from = currentDef.minPoints
+  const to = nextDef.minPoints
+  const progress = Math.min(100, Math.round(((totalPoints - from) / (to - from)) * 100))
+  return { progress, toNext: Math.max(0, to - totalPoints), next: to }
+}
+
+// ─── Character image ────────────────────────────────────────────────────────
+// characterId(1~4) · stage(1~5) · mood(1~3) 조합의 정적 이미지 경로.
+// characterId가 없으면(캐릭터 미선택) null을 반환한다.
+export function getCharacterImage(characterId, stage, mood) {
+  if (characterId == null) return null
+  return `/characters/char${characterId}_s${stage}_m${mood}.webp`
 }
 
 // ─── Evolution acknowledgement (localStorage) ─────────────────────────────────
