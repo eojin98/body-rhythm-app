@@ -22,6 +22,7 @@ import { syncPendingBoostActions, getActiveTimerState } from './utils/boostAlarm
 import { syncPointsToServer, syncFromServer } from './lib/pointSync'
 import { TEST_HOURLY_BEHAVIORS } from './utils/alarmContent'
 import { recordPoint, POINT_POLICY } from './utils/pointLedger'
+import { closeTopOverlay } from './utils/backHandler'
 import Onboarding from './pages/Onboarding'
 import Home from './pages/Home'
 import MorningCheckin from './pages/MorningCheckin'
@@ -58,6 +59,8 @@ function AppContent() {
     if (!Capacitor.isNativePlatform()) return
 
     const subscription = CapApp.addListener('backButton', ({ canGoBack }) => {
+      // 모달 등 오버레이가 열려 있으면 그것만 닫는다 (열린 게 없으면 아래 기존 동작 그대로)
+      if (closeTopOverlay()) return
       if (exitConfirmRef.current) {
         // Popup is showing — close it instead of exiting
         setExitConfirmVisible(false)

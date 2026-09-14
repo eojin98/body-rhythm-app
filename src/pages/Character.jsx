@@ -9,6 +9,7 @@ import {
   getAcknowledgedStage, setAcknowledgedStage,
 } from '../utils/characterLogic'
 import { getTotalPoints, getTodayPoints } from '../utils/pointLedger'
+import RankingModal from '../components/RankingModal'
 
 const CHAR_IMG_HEIGHT = 200 // 컨테이너 높이 고정 — 하단 정렬 이미지가 단계/상태별로 바뀌어도 위아래로 튀지 않게
 
@@ -19,6 +20,7 @@ export default function Character() {
   const [showEvolveAnim, setShowEvolveAnim] = useState(false)
   const [evolvedStage, setEvolvedStage] = useState(null)
   const [imgError, setImgError] = useState(false)
+  const [showRanking, setShowRanking] = useState(false)
 
   const characterId = profile?.character_id ?? null
   const characterName = profile?.character_name ?? ''
@@ -95,9 +97,27 @@ export default function Character() {
       {/* ── Character card ── */}
       <div className="section">
         <div style={{
+          position: 'relative',
           background: 'linear-gradient(135deg, #F5F4FF 0%, #EDE9FF 100%)',
           borderRadius: 24, padding: '32px 24px', textAlign: 'center',
         }}>
+          {/* 랭킹 버튼 — 카드 우측 상단 모서리. 이미지는 가운데 정렬이라 겹치지 않는다 */}
+          <button
+            onClick={() => setShowRanking(true)}
+            aria-label="랭킹 보기"
+            style={{
+              position: 'absolute', top: 12, right: 12,
+              width: 38, height: 38, borderRadius: '50%', border: 'none',
+              background: 'rgba(255, 255, 255, 0.85)',
+              boxShadow: '0 2px 8px rgba(108, 92, 231, 0.18)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 18, lineHeight: 1, cursor: 'pointer',
+            }}
+          >
+            👑
+          </button>
+          {showRanking && <RankingModal onClose={() => setShowRanking(false)} />}
+
           <div style={{
             height: CHAR_IMG_HEIGHT, display: 'flex', alignItems: 'flex-end',
             justifyContent: 'center', marginBottom: 16,
