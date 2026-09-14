@@ -132,9 +132,12 @@ function AppContent() {
 
       // Handle notification action buttons (완료 / 나중에 / 건너뜀)
       const removeActionListener = initNotificationActionListener(
-        async (periodId, action, snoozeMins = 30, firedDate, firstFiredAtMs) => {
+        async (periodId, action, snoozeMins = 30, firedDate, firstFiredAtMs, snoozeExtraMs = 0) => {
           const date = firedDate || getTodayKey()
-          const isLate = firstFiredAtMs != null && (Date.now() - firstFiredAtMs) > POINT_POLICY.REACTION_DEADLINE_MS
+          // 알림 액션 버튼은 탭하는 순간 앱이 실행/재개되며 콜백이 실행되므로 Date.now()가 곧 응답 시각이다.
+          // 기한에는 스누즈로 미룬 누적 시간을 더해준다 (안 그러면 30분 스누즈는 무조건 0P가 된다).
+          const isLate = firstFiredAtMs != null
+            && (Date.now() - firstFiredAtMs) > POINT_POLICY.REACTION_DEADLINE_MS + snoozeExtraMs
           if (action === 'done') {
             saveRoutineAction(date, periodId, 'done')
             recordPoint({ date, alarmId: periodId, action: isLate ? 'normal_complete_late' : 'normal_complete', points: isLate ? 0 : undefined })
@@ -147,11 +150,11 @@ function AppContent() {
             if (periodId.startsWith('test_')) {
               const hk = periodId.replace('test_', '')
               const behavior = TEST_HOURLY_BEHAVIORS[hk]
-              await scheduleTestSnoozeNotification(hk, behavior, snoozeMins, firstFiredAtMs)
+              await scheduleTestSnoozeNotification(hk, behavior, snoozeMins, firstFiredAtMs, snoozeExtraMs)
             } else {
               const settings = getSettings()
               const alarm = settings.alarms.find(a => a.type === periodId)
-              if (alarm) await scheduleSnoozeNotification(alarm, snoozeMins, firstFiredAtMs)
+              if (alarm) await scheduleSnoozeNotification(alarm, snoozeMins, firstFiredAtMs, snoozeExtraMs)
             }
           }
         },

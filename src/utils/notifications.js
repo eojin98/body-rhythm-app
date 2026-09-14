@@ -42,6 +42,18 @@ function resolveFiredDate(extra) {
  * so the deadline is always measured from the FIRST fire, not the snooze re-fire.
  * Repeating alarms reconstruct the time from `firedHour` + `firedMinute` + `firedDate`.
  */
+/**
+ * 스누즈로 미뤄진 누적 시간(ms). 15분 반응 기한에 이만큼 더해준다.
+ *
+ * 기한은 최초 발화 시각(originalFiredAtMs) 기준이라, 30분 스누즈를 쓰면 재발화 시점에
+ * 이미 15분이 지나 무조건 0P가 되어버린다. 스누즈로 미룬 시간만큼 기한을 늘려주면
+ * "재발화 후 15분 안에 반응" 이라는 원래 취지대로 동작한다.
+ * (강화알람의 timerExtra와 같은 방식)
+ */
+function resolveSnoozeExtraMs(extra) {
+  return extra.snoozeExtraMs ?? 0
+}
+
 function resolveFirstFiredAtMs(extra) {
   if (extra.originalFiredAtMs != null) return extra.originalFiredAtMs
   if (extra.firedHour != null) {
@@ -236,7 +248,7 @@ export async function registerNotificationActionTypes() {
 }
 
 // Set up listener for notification action button clicks.
-// Calls onAction(periodId, action, snoozeMins, firedDate, firstFiredAtMs) when a button is tapped.
+// Calls onAction(periodId, action, snoozeMins, firedDate, firstFiredAtMs, snoozeExtraMs) when a button is tapped.
 // Must be called once on app init (before any notification fires).
 export function initNotificationActionListener(onAction) {
   if (!isNative()) return () => {}
@@ -249,14 +261,15 @@ export function initNotificationActionListener(onAction) {
 
       const firedDate     = resolveFiredDate(extra)
       const firstFiredAtMs = resolveFirstFiredAtMs(extra)
+      const snoozeExtraMs = resolveSnoozeExtraMs(extra)
       const actionId = event.actionId // 'done' | 'later' | 'skip' | 'tap'
       if (actionId === 'done') {
-        onAction(periodId, 'done', undefined, firedDate, firstFiredAtMs)
+        onAction(periodId, 'done', undefined, firedDate, firstFiredAtMs, snoozeExtraMs)
       } else if (actionId === 'later') {
         const snoozeMins = periodId.startsWith('test_') ? 10 : 30
-        onAction(periodId, 'snooze', snoozeMins, firedDate, firstFiredAtMs)
+        onAction(periodId, 'snooze', snoozeMins, firedDate, firstFiredAtMs, snoozeExtraMs)
       } else if (actionId === 'skip') {
-        onAction(periodId, 'skipped', undefined, firedDate, firstFiredAtMs)
+        onAction(periodId, 'skipped', undefined, firedDate, firstFiredAtMs, snoozeExtraMs)
       }
       // 'tap' (사용자가 알림 자체를 탭) — 앱을 열기만 하므로 별도 처리 없음
     },
@@ -295,7 +308,8 @@ export async function scheduleAlarmNotifications(alarm, soundMode) {
 
 // Schedule a one-time snooze notification (native only)
 // originalFiredAtMs: Unix ms of the alarm's FIRST fire time (for policy 2 deadline preservation)
-export async function scheduleSnoozeNotification(alarm, snoozeMins = 30, originalFiredAtMs = null) {
+// prevSnoozeExtraMs: 이전까지 스누즈로 미룬 누적 시간(ms). 이번 스누즈 분을 더해 넘긴다.
+export async function scheduleSnoozeNotification(alarm, snoozeMins = 30, originalFiredAtMs = null, prevSnoozeExtraMs = 0) {
   if (!isNative()) return
   const { title, body } = buildNotifContent(alarm)
   const snoozeId = toNotifId(alarm.id, 8) // slot 8 = snooze
@@ -312,7 +326,13 @@ export async function scheduleSnoozeNotification(alarm, snoozeMins = 30, origina
       body,
       channelId,
       actionTypeId: 'HABIT_ACTION',
-      extra: { periodId: alarm.type, alarmId: alarm.id, firedDate: dateKey(snoozeAt), originalFiredAtMs },
+      extra: {
+        periodId: alarm.type,
+        alarmId: alarm.id,
+        firedDate: dateKey(snoozeAt),
+        originalFiredAtMs,
+        snoozeExtraMs: prevSnoozeExtraMs + snoozeMins * 60 * 1000,
+      },
       schedule: {
         at: snoozeAt,
         allowWhileIdle: true,
@@ -326,7 +346,8 @@ export async function scheduleSnoozeNotification(alarm, snoozeMins = 30, origina
 const TEST_SNOOZE_NOTIF_ID = 9098
 
 // originalFiredAtMs: Unix ms of the alarm's FIRST fire time (for policy 2 deadline preservation)
-export async function scheduleTestSnoozeNotification(hk, behavior, snoozeMins = 10, originalFiredAtMs = null) {
+// prevSnoozeExtraMs: 이전까지 스누즈로 미룬 누적 시간(ms). 이번 스누즈 분을 더해 넘긴다.
+export async function scheduleTestSnoozeNotification(hk, behavior, snoozeMins = 10, originalFiredAtMs = null, prevSnoozeExtraMs = 0) {
   if (!isNative()) return
   const h = parseInt(hk, 10)
   const dh = h === 0 ? 12 : h > 12 ? h - 12 : h
@@ -344,7 +365,12 @@ export async function scheduleTestSnoozeNotification(hk, behavior, snoozeMins = 
       body: behavior?.title ?? '루틴 알람',
       channelId,
       actionTypeId: 'HABIT_ACTION',
-      extra: { periodId: `test_${hk}`, firedDate: dateKey(testSnoozeAt), originalFiredAtMs },
+      extra: {
+        periodId: `test_${hk}`,
+        firedDate: dateKey(testSnoozeAt),
+        originalFiredAtMs,
+        snoozeExtraMs: prevSnoozeExtraMs + snoozeMins * 60 * 1000,
+      },
       schedule: {
         at: testSnoozeAt,
         allowWhileIdle: true,

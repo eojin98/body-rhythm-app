@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { getRecords } from '../utils/storage'
 import {
   getTotalDone, getCurrentStreak, getWeekAvgScore, getTodayScore,
-  getConditionScore, getMood, MOODS,
+  getWeeklyPracticeRate, getMood, MOODS,
   getStage, getStageProgress, getCharacterImage,
   getAcknowledgedStage, setAcknowledgedStage,
 } from '../utils/characterLogic'
@@ -14,7 +14,7 @@ const CHAR_IMG_HEIGHT = 200 // 컨테이너 높이 고정 — 하단 정렬 이�
 
 export default function Character() {
   const navigate = useNavigate()
-  const { profile } = useAuth()
+  const { profile, user } = useAuth()
   const [records] = useState(() => getRecords())
   const [showEvolveAnim, setShowEvolveAnim] = useState(false)
   const [evolvedStage, setEvolvedStage] = useState(null)
@@ -27,8 +27,8 @@ export default function Character() {
   const streak = getCurrentStreak(records)
   const weekAvg = getWeekAvgScore(records)
   const todayScore = getTodayScore(records)
-  const conditionScore = getConditionScore(records)
-  const mood = getMood(conditionScore)
+  const weeklyRate = getWeeklyPracticeRate(records, user?.created_at)
+  const mood = getMood(weeklyRate)
   const moodDef = MOODS.find(m => m.mood === mood) ?? MOODS[MOODS.length - 1]
 
   // ledger 변경(서버 병합·포인트 적립) 시 포인트/단계 표시 갱신
@@ -160,12 +160,14 @@ export default function Character() {
         </div>
       </div>
 
-      {/* ── Condition card ── */}
+      {/* ── Condition card (어제까지 7일 실천률 기준) ── */}
       <div className="section" style={{ paddingTop: 0 }}>
         <div className="card" style={{ padding: '18px 20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <span style={{ fontWeight: 700, fontSize: 15, color: '#1E1E2E' }}>오늘 컨디션</span>
-            <span style={{ fontSize: 13, color: '#A0A0B8' }}>{conditionScore}점</span>
+            <span style={{ fontWeight: 700, fontSize: 15, color: '#1E1E2E' }}>지난 7일 컨디션</span>
+            <span style={{ fontSize: 13, color: '#A0A0B8' }}>
+              {weeklyRate != null ? `실천률 ${weeklyRate}%` : '집계 전'}
+            </span>
           </div>
           <div style={{ marginBottom: 12 }}>
             <div style={{ fontWeight: 700, fontSize: 15, color: '#6C5CE7', marginBottom: 2 }}>{moodDef.label}</div>
@@ -173,10 +175,13 @@ export default function Character() {
           </div>
           <div style={{ background: '#F5F5FA', borderRadius: 8, height: 8, overflow: 'hidden' }}>
             <div style={{
-              width: `${conditionScore}%`, height: '100%',
+              width: `${weeklyRate ?? 0}%`, height: '100%',
               background: 'linear-gradient(90deg, #6C5CE7, #A29BFE)',
               borderRadius: 8, transition: 'width 0.6s ease',
             }} />
+          </div>
+          <div style={{ fontSize: 11, color: '#A0A0B8', marginTop: 8 }}>
+            어제까지 7일 기준 · 오늘 기록은 내일 반영돼요
           </div>
         </div>
       </div>

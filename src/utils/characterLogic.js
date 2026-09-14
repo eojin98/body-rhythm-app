@@ -1,4 +1,5 @@
 // Pure functions for character state — import these anywhere including tests
+import { calculatePracticeRate } from './storage'
 
 function dateKey(offsetDays = 0) {
   const d = new Date()
@@ -59,29 +60,68 @@ export function getCurrentStreak(records) {
   return streak
 }
 
-// Weighted condition score (0–100)
-export function getConditionScore(records) {
-  const todayScore = getTodayScore(records)
-  const weekAvg = getWeekAvgScore(records)
-  const streak = getCurrentStreak(records)
-  const total = getTotalDone(records)
+// ─── Weekly practice rate (mood 기준) ─────────────────────────────────────────
 
-  const streakScore = Math.min(100, (streak / 30) * 100)
-  const totalScore = Math.min(100, (total / 200) * 100)
+function localDateKey(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
-  return Math.round(todayScore * 0.4 + weekAvg * 0.3 + streakScore * 0.2 + totalScore * 0.1)
+function hasPracticeData(record) {
+  return Object.values(record?.routines || {}).some(r => r?.status != null)
+}
+
+/**
+ * 어제까지 7일(오늘 제외) 실천률 평균(0~100). 집계할 날이 하루도 없으면 null.
+ *
+ * - 오늘은 제외한다. 알람이 아직 안 울린 시간대에 오늘이 0%로 들어가면 같은 날 안에서도
+ *   아침·저녁 mood가 달라져 추세 지표로 쓸 수 없기 때문이다.
+ * - 하루 단위 실천률은 storage.calculatePracticeRate(record)를 그대로 쓴다.
+ * - 기록이 없는 날은 0%로 센다 (분모는 달력 일수).
+ * - 시작일 = max(가입일, 이 기기의 가장 이른 기록일). 시작일 이후가 7일 미만이면
+ *   그 일수로만 나눠, 가입 초반이나 새 기기 설치 직후 무조건 '지침'이 되지 않게 한다.
+ *   (실천 기록은 기기 로컬 저장이라, 가입일만 쓰면 새 기기에서 빈 날이 0%로 잡힌다)
+ * - 가입 당일처럼 시작일이 오늘이라 집계할 어제가 없으면 null을 반환한다.
+ *
+ * @param {object} records     storage.getRecords() 결과
+ * @param {string} [signupAt]  가입 시각 (Supabase user.created_at, ISO 문자열)
+ */
+export function getWeeklyPracticeRate(records, signupAt = null) {
+  const recordKeys = Object.keys(records).filter(k => hasPracticeData(records[k])).sort()
+  if (!recordKeys.length) return null
+
+  let startKey = recordKeys[0]
+  if (signupAt) {
+    const signup = new Date(signupAt)
+    if (!Number.isNaN(signup.getTime())) {
+      const signupKey = localDateKey(signup)
+      if (signupKey > startKey) startKey = signupKey
+    }
+  }
+
+  let sum = 0
+  let days = 0
+  for (let i = 1; i <= 7; i++) {   // 어제(i=1)부터 7일 전(i=7)까지
+    const key = dateKey(i)
+    if (key < startKey) break
+    sum += calculatePracticeRate(records[key])
+    days++
+  }
+  if (days === 0) return null
+  return Math.round(sum / days)
 }
 
 // ─── Mood levels (상태, 3단계) ──────────────────────────────────────────────────
-// 구간 경계값은 이 배열 한 곳에서만 관리한다.
+// 기준: 어제까지 7일 실천률(%). 구간 경계값은 이 배열 한 곳에서만 관리한다.
 export const MOODS = [
-  { mood: 1, minScore: 70, label: '활발', message: '오늘도 팔팔해요! 이 페이스를 유지해요' },
-  { mood: 2, minScore: 40, label: '보통', message: '나쁘지 않아요. 오늘 하나만 더 해볼까요?' },
-  { mood: 3, minScore: 0,  label: '지침', message: '조금 지친 것 같아요. 쉬어도 괜찮아요' },
+  { mood: 1, minRate: 70, label: '활발', message: '최근 일주일 꾸준했어요! 이 페이스를 유지해요' },
+  { mood: 2, minRate: 50, label: '보통', message: '나쁘지 않아요. 조금만 더 꾸준해져 볼까요?' },
+  { mood: 3, minRate: 0,  label: '지침', message: '요즘 조금 지친 것 같아요. 하나씩 다시 시작해봐요' },
 ]
 
-export function getMood(score) {
-  return (MOODS.find(m => score >= m.minScore) ?? MOODS[MOODS.length - 1]).mood
+/** @param {number|null} weeklyRate getWeeklyPracticeRate() 결과. null(집계할 날 없음)이면 보통(2). */
+export function getMood(weeklyRate) {
+  if (weeklyRate == null) return 2
+  return (MOODS.find(m => weeklyRate >= m.minRate) ?? MOODS[MOODS.length - 1]).mood
 }
 
 // ─── Growth stages (성장 단계, 5단계) ───────────────────────────────────────────
