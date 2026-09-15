@@ -128,7 +128,13 @@ function resolveTimeStr(alarmId) {
  */
 export function recordPoint({ date, alarmId, action, timerSeconds = null, points: pointsOverride = undefined, occurrenceId = null }) {
   // 로그인 안 된 상태에서는 포인트 미기록 (알람 동작은 정상, 포인트만 건너뜀)
-  if (!_currentUserId) return
+  if (!_currentUserId) {
+    console.warn('[pointLedger] 로그인 사용자가 확정되지 않아 포인트 기록을 버립니다:', {
+      action, date, alarmId, occurrenceId,
+      points: pointsOverride !== undefined ? pointsOverride : calcPoints(action, timerSeconds),
+    })
+    return
+  }
   // pointsOverride가 없을 때만 calcPoints를 위해 action이 알려진 값인지 검사한다.
   // pointsOverride가 주어진 호출(사유 코드 action, 0P 포함)은 calcPoints를 쓰지 않으므로 통과시킨다.
   if (pointsOverride === undefined && !(action in POINT_VALUES)) return

@@ -120,77 +120,13 @@ function AppContent() {
         .then(() => registerNotificationActionTypes())
         .then(() => syncAllAlarmNotifications(s.alarms, s.testMode))
 
-      // Sync any done/skipped actions recorded by BoostAlarmActivity while app was dead
-      syncPendingBoostActions()
-
-      const refreshTimer = async () => {
-        try {
-          const state = await getActiveTimerState()
-          setActiveTimer(state.active
-            ? { alarmLabel: state.alarmLabel, endsAt: Date.now() + state.remainingSeconds * 1000 }
-            : null)
-        } catch {}
-      }
-      refreshTimer()
-
-      // Handle notification action buttons (완료 / 나중에 / 건너뜀)
-      const removeActionListener = initNotificationActionListener(
-        async (periodId, action, snoozeMins = 30, firedDate, firstFiredAtMs, snoozeExtraMs = 0) => {
-          const date = firedDate || getTodayKey()
-          // 알림 액션 버튼은 탭하는 순간 앱이 실행/재개되며 콜백이 실행되므로 Date.now()가 곧 응답 시각이다.
-          // 기한에는 스누즈로 미룬 누적 시간을 더해준다 (안 그러면 30분 스누즈는 무조건 0P가 된다).
-          const isLate = firstFiredAtMs != null
-            && (Date.now() - firstFiredAtMs) > POINT_POLICY.REACTION_DEADLINE_MS + snoozeExtraMs
-          if (action === 'done') {
-            saveRoutineAction(date, periodId, 'done')
-            recordPoint({ date, alarmId: periodId, action: isLate ? 'normal_complete_late' : 'normal_complete', points: isLate ? 0 : undefined })
-          } else if (action === 'skipped') {
-            saveRoutineAction(date, periodId, 'skipped')
-            // 건너뜀 = 0P. 사유 추적을 위해 0P도 원장에 기록한다(policy 4 변경).
-            recordPoint({ date, alarmId: periodId, action: 'normal_skipped', points: 0 })
-          } else if (action === 'snooze') {
-            setSnooze(periodId, Date.now() + snoozeMins * 60 * 1000)
-            if (periodId.startsWith('test_')) {
-              const hk = periodId.replace('test_', '')
-              const behavior = TEST_HOURLY_BEHAVIORS[hk]
-              await scheduleTestSnoozeNotification(hk, behavior, snoozeMins, firstFiredAtMs, snoozeExtraMs)
-            } else {
-              const settings = getSettings()
-              const alarm = settings.alarms.find(a => a.type === periodId)
-              if (alarm) await scheduleSnoozeNotification(alarm, snoozeMins, firstFiredAtMs, snoozeExtraMs)
-            }
-          }
-        },
-      )
-
       // Ringer mode 변경 시 알람 재스케줄 (NORMAL ↔ SILENT/VIBRATE 전환 즉시 반영)
       const removeRingerListener = addRingerModeListener(() => {
         const settings = getSettings()
         syncAllAlarmNotifications(settings.alarms, settings.testMode)
       })
 
-      // 앱이 백그라운드에서 포그라운드로 복귀할 때 재스케줄
-      const handleVisibilityChange = () => {
-        if (document.visibilityState === 'visible') {
-          syncPendingBoostActions()
-          syncPointsToServer()
-          refreshTimer()
-        }
-      }
-      document.addEventListener('visibilitychange', handleVisibilityChange)
-
-      // Capacitor appStateChange: BoostAlarmActivity → MainActivity 전환 시
-      // visibilitychange가 발화하지 않는 경우를 위한 이중 안전장치
-      const appStateHandle = CapApp.addListener('appStateChange', ({ isActive }) => {
-        if (isActive) { syncPendingBoostActions(); syncPointsToServer(); refreshTimer() }
-      })
-
-      return () => {
-        removeActionListener()
-        removeRingerListener()
-        document.removeEventListener('visibilitychange', handleVisibilityChange)
-        appStateHandle.then(h => h.remove())
-      }
+      return () => { removeRingerListener() }
     } else {
       // Web/PWA: poll every 10 seconds to fire alarms at the right minute
       const tick = () => {
@@ -209,6 +145,85 @@ function AppContent() {
     // 온보딩 완료 전에는 위 early-return으로 아무것도 등록하지 않으므로, 이후
     // onboardingDone이 true로 바뀌어 재실행돼도 중복 등록되지 않는다.
   }, [onboardingDone])
+
+  // ─── 포인트를 기록하는 경로 (세션 복원이 끝난 뒤) ────────────────────────────
+  // 콜드 스타트에서 이 경로가 세션 복원보다 먼저 돌면 recordPoint가 사용자(_currentUserId)를
+  // 모르는 채로 불려 포인트가 버려진다. 그래서 authLoading이 끝난 뒤에 등록한다.
+  // 늦게 등록해도 유실은 없다: 알림 탭 이벤트는 리스너가 붙을 때까지 네이티브가 보관하고,
+  // 강화알람 대기 목록도 getPendingActions()로 읽기 전까지 네이티브에 남아 있다.
+  // user가 null로 확정된(비로그인) 경우에도 등록한다 — 루틴 기록은 반영되고 포인트만 건너뛴다.
+  const authReady = !authLoading
+  useEffect(() => {
+    if (!authReady || !Capacitor.isNativePlatform()) return
+    if (!getSettings().onboardingComplete) return
+
+    // Sync any done/skipped actions recorded by BoostAlarmActivity while app was dead
+    syncPendingBoostActions()
+
+    const refreshTimer = async () => {
+      try {
+        const state = await getActiveTimerState()
+        setActiveTimer(state.active
+          ? { alarmLabel: state.alarmLabel, endsAt: Date.now() + state.remainingSeconds * 1000 }
+          : null)
+      } catch {}
+    }
+    refreshTimer()
+
+    // Handle notification action buttons (완료 / 나중에 / 건너뜀)
+    const removeActionListener = initNotificationActionListener(
+      async (periodId, action, snoozeMins = 30, firedDate, firstFiredAtMs, snoozeExtraMs = 0) => {
+        const date = firedDate || getTodayKey()
+        // 알림 액션 버튼은 탭하는 순간 앱이 실행/재개되며 콜백이 실행되므로 Date.now()가 곧 응답 시각이다.
+        // 기한에는 스누즈로 미룬 누적 시간을 더해준다 (안 그러면 30분 스누즈는 무조건 0P가 된다).
+        const isLate = firstFiredAtMs != null
+          && (Date.now() - firstFiredAtMs) > POINT_POLICY.REACTION_DEADLINE_MS + snoozeExtraMs
+        if (action === 'done') {
+          saveRoutineAction(date, periodId, 'done')
+          recordPoint({ date, alarmId: periodId, action: isLate ? 'normal_complete_late' : 'normal_complete', points: isLate ? 0 : undefined })
+        } else if (action === 'skipped') {
+          saveRoutineAction(date, periodId, 'skipped')
+          // 건너뜀 = 0P. 사유 추적을 위해 0P도 원장에 기록한다(policy 4 변경).
+          recordPoint({ date, alarmId: periodId, action: 'normal_skipped', points: 0 })
+        } else if (action === 'snooze') {
+          setSnooze(periodId, Date.now() + snoozeMins * 60 * 1000)
+          if (periodId.startsWith('test_')) {
+            const hk = periodId.replace('test_', '')
+            const behavior = TEST_HOURLY_BEHAVIORS[hk]
+            await scheduleTestSnoozeNotification(hk, behavior, snoozeMins, firstFiredAtMs, snoozeExtraMs)
+          } else {
+            const settings = getSettings()
+            const alarm = settings.alarms.find(a => a.type === periodId)
+            if (alarm) await scheduleSnoozeNotification(alarm, snoozeMins, firstFiredAtMs, snoozeExtraMs)
+          }
+        }
+      },
+    )
+
+    // 앱이 백그라운드에서 포그라운드로 복귀할 때 재동기화
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        syncPendingBoostActions()
+        syncPointsToServer()
+        refreshTimer()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    // Capacitor appStateChange: BoostAlarmActivity → MainActivity 전환 시
+    // visibilitychange가 발화하지 않는 경우를 위한 이중 안전장치
+    const appStateHandle = CapApp.addListener('appStateChange', ({ isActive }) => {
+      if (isActive) { syncPendingBoostActions(); syncPointsToServer(); refreshTimer() }
+    })
+
+    return () => {
+      removeActionListener()
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      appStateHandle.then(h => h.remove())
+    }
+    // authLoading은 true→false로 한 번만, onboardingDone도 false→true로 한 번만 바뀐다.
+    // 따라서 재실행은 최대 두 번이고, 매번 이전 등록을 위 cleanup으로 해제한 뒤 다시 등록한다.
+  }, [authReady, onboardingDone])
 
   // ─── 인증 로딩 (세션 복원 중, 보통 수십ms) + 프로필 로딩 ─────────────────────
   if (authLoading || (user && profileLoading)) {
