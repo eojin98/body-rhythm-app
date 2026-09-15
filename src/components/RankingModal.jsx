@@ -172,30 +172,101 @@ function RankRow({ row }) {
   )
 }
 
-// 이미지 비율 300x333 유지, 하단 정렬. 캐릭터 미선택(src=null)이나 로드 실패 시 중립 표시.
+// ─── 랭킹 아바타 ────────────────────────────────────────────────────────────
+// 캐릭터 원본(300x333)은 하단 정렬로 그려져 위쪽이 투명하고, 성장 단계·캐릭터마다 그려진 크기가
+// 크게 다르다(그려진 높이 104~269px). 원본을 그대로 줄이면 1단계는 작고 아래로 치우쳐 보이므로,
+// 불러온 뒤 실제로 그려진(불투명) 영역을 재서 그 영역만 고정 칸에 꽉 맞춰(contain) 가운데에 둔다.
+const AVATAR_SIZE = 48
+const ALPHA_THRESHOLD = 16 // 이 값 이하의 반투명 가장자리는 그림 영역에서 제외
+const visibleBoxCache = new Map() // src → { x0, y0, w, h, W, H } | null(측정 실패)
+
+function measureVisibleBox(img) {
+  const W = img.naturalWidth
+  const H = img.naturalHeight
+  const canvas = document.createElement('canvas')
+  canvas.width = W
+  canvas.height = H
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  ctx.drawImage(img, 0, 0)
+  const { data } = ctx.getImageData(0, 0, W, H)
+  let x0 = W, y0 = H, x1 = -1, y1 = -1
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      if (data[(y * W + x) * 4 + 3] > ALPHA_THRESHOLD) {
+        if (x < x0) x0 = x
+        if (x > x1) x1 = x
+        if (y < y0) y0 = y
+        if (y > y1) y1 = y
+      }
+    }
+  }
+  if (x1 < 0) return null
+  return { x0, y0, w: x1 - x0 + 1, h: y1 - y0 + 1, W, H }
+}
+
+// 그려진 영역이 AVATAR_SIZE 칸 안에 꽉 차고 정확히 가운데 오도록 원본 전체의 크기·위치를 정한다
+function fitToVisibleBox(box) {
+  const s = AVATAR_SIZE / Math.max(box.w, box.h)
+  return {
+    position: 'absolute',
+    width: box.W * s,
+    height: box.H * s,
+    left: (AVATAR_SIZE - box.w * s) / 2 - box.x0 * s,
+    top: (AVATAR_SIZE - box.h * s) / 2 - box.y0 * s,
+    maxWidth: 'none', // 원본을 칸보다 크게 두고 넘친 투명 영역을 잘라내는 구조라 max-width가 걸리면 안 된다
+  }
+}
+
+// 캐릭터 미선택(src=null)이나 로드 실패 시에는 같은 칸·같은 중앙 정렬로 중립 표시
 function RankAvatar({ src }) {
+  // undefined = 아직 측정 전, null = 측정 실패, 객체 = 측정된 그림 영역
+  const [box, setBox] = useState(() => visibleBoxCache.get(src))
   const [failed, setFailed] = useState(false)
+
+  if (!src || failed) {
+    return (
+      <div style={avatarBoxStyle}>
+        <div style={avatarPlaceholderStyle}>🐾</div>
+      </div>
+    )
+  }
+
+  const handleLoad = (e) => {
+    if (!visibleBoxCache.has(src)) {
+      let measured = null
+      try {
+        measured = measureVisibleBox(e.currentTarget)
+      } catch {
+        // 캔버스를 쓸 수 없으면 원본 전체를 칸에 맞춰 보여준다
+      }
+      visibleBoxCache.set(src, measured)
+    }
+    setBox(visibleBoxCache.get(src))
+  }
+
+  const imgStyle =
+    box === undefined ? { ...avatarFallbackImgStyle, opacity: 0 } // 측정 전에는 숨겨 위치가 튀지 않게
+    : box === null ? avatarFallbackImgStyle
+    : fitToVisibleBox(box)
+
   return (
-    <div style={{
-      width: 40, height: 44, flexShrink: 0,
-      display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
-    }}>
-      {src && !failed ? (
-        <img
-          src={src}
-          alt=""
-          onError={() => setFailed(true)}
-          style={{ height: '100%', width: 'auto', maxWidth: '100%', objectFit: 'contain' }}
-        />
-      ) : (
-        <div style={{
-          width: 36, height: 36, marginBottom: 4, borderRadius: '50%',
-          background: '#F0F0F8', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 16, opacity: 0.5, userSelect: 'none',
-        }}>🐾</div>
-      )}
+    <div style={avatarBoxStyle}>
+      <img src={src} alt="" onLoad={handleLoad} onError={() => setFailed(true)} style={imgStyle} />
     </div>
   )
+}
+
+const avatarBoxStyle = {
+  position: 'relative', width: AVATAR_SIZE, height: AVATAR_SIZE, flexShrink: 0,
+  overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
+}
+
+const avatarFallbackImgStyle = { width: '100%', height: '100%', objectFit: 'contain' }
+
+const avatarPlaceholderStyle = {
+  width: AVATAR_SIZE - 4, height: AVATAR_SIZE - 4, borderRadius: '50%',
+  background: '#F0F0F8', display: 'flex', alignItems: 'center', justifyContent: 'center',
+  fontSize: 20, opacity: 0.5, userSelect: 'none',
 }
 
 function Message({ children }) {
@@ -234,9 +305,10 @@ const tabStyle = (active) => ({
   fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
 })
 
+// 아바타가 48px로 커진 만큼 세로 여백을 줄여 행 높이(약 63px)는 이전과 같게 유지하고, 가로 간격은 넓힌다
 const rowStyle = (isMe) => ({
-  display: 'flex', alignItems: 'center', gap: 10,
-  padding: '8px 8px', marginBottom: 4, borderRadius: 14,
+  display: 'flex', alignItems: 'center', gap: 12,
+  padding: '6px 10px', marginBottom: 4, borderRadius: 14,
   background: isMe ? '#F5F4FF' : 'transparent',
   border: `1.5px solid ${isMe ? '#A29BFE' : 'transparent'}`,
 })
