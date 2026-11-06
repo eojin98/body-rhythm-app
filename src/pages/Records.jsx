@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  getRecords, calculatePracticeRate,
+  getRecords, calculateDayPracticeRate, getDayPracticeCells,
   DAY_NAMES, getTodayKey, getLastWeekDates, getSettings,
 } from '../utils/storage'
 import { ALARM_PERIODS, PERIOD_ORDER, TEST_HOURLY_BEHAVIORS, getEffectiveBehaviors } from '../utils/alarmContent'
@@ -304,7 +304,7 @@ function StatsSegment({ records }) {
   const weekData = weekDates.map(({ key, label }) => {
     const rec = records[key]
     const routineStatus = rec?.routines?.[periodTab]?.status || null
-    return { key, label, status: routineStatus, rate: rec ? calculatePracticeRate(rec) : null, completed: rec?.completed ?? false }
+    return { key, label, status: routineStatus, rate: calculateDayPracticeRate(key, rec), completed: rec?.completed ?? false }
   })
 
   const doneCount = weekData.filter(d => d.status === 'done').length
@@ -615,13 +615,14 @@ function WeekView({ date, records, todayKey, onGoToDay }) {
   const weekDates = getWeekDates(weekStart)
   const weekKeys = weekDates.map(dateToKey)
   const weekRecords = weekKeys.map(k => records[k] || null)
-  const weekRates = weekRecords.map(r => (r ? calculatePracticeRate(r) : null))
+  const weekRates = weekKeys.map(k => calculateDayPracticeRate(k, records[k]))
 
   const recordedDays = weekRecords.filter(Boolean)
   const checkinDays = recordedDays.filter(r => r.completed)
 
-  const avgRate = recordedDays.length > 0
-    ? Math.round(recordedDays.reduce((s, r) => s + calculatePracticeRate(r), 0) / recordedDays.length)
+  const ratedWeekRates = weekRates.filter(r => r !== null)
+  const avgRate = ratedWeekRates.length > 0
+    ? Math.round(ratedWeekRates.reduce((s, r) => s + r, 0) / ratedWeekRates.length)
     : null
 
   const avgSleep = checkinDays.length > 0
@@ -743,9 +744,13 @@ function MonthView({ date, records, todayKey, onGoToDay }) {
     if (r.exercise && typeof r.exerciseDurationMins === 'number') return s + r.exerciseDurationMins
     return s
   }, 0)
-  const ratedDays = monthRecords.filter(r => calculatePracticeRate(r) > 0)
-  const avgRate = ratedDays.length > 0
-    ? Math.round(ratedDays.reduce((s, r) => s + calculatePracticeRate(r), 0) / ratedDays.length)
+  const monthRates = []
+  for (let d = 1; d <= daysInMonth; d++) {
+    const rate = calculateDayPracticeRate(dk(d), records[dk(d)])
+    if (rate !== null) monthRates.push(rate)
+  }
+  const avgRate = monthRates.length > 0
+    ? Math.round(monthRates.reduce((s, r) => s + r, 0) / monthRates.length)
     : null
 
   const sleepData = []
@@ -772,7 +777,7 @@ function MonthView({ date, records, todayKey, onGoToDay }) {
               const d = i + 1
               const key = dk(d)
               const rec = records[key]
-              const rate = rec ? calculatePracticeRate(rec) : 0
+              const rate = calculateDayPracticeRate(key, rec) ?? 0
               const isToday = key === todayKey
               const dotColor = rate > 0 ? getRateColor(rate) : null
               const dow = new Date(year, month, d).getDay()
@@ -844,30 +849,28 @@ function MonthView({ date, records, todayKey, onGoToDay }) {
 
 // ─── 하루 상세 기록 ───────────────────────────────────────────────────────────
 
-const COUNTED_STATUSES = ['done', 'skipped', 'missed']
 const periodRank = id => {
   const i = PERIOD_ORDER.indexOf(id)
   return i === -1 ? PERIOD_ORDER.length : i
 }
 
-function RecordDetail({ record }) {
-  const rate = calculatePracticeRate(record)
+function RecordDetail({ record, dateKey }) {
+  // 실천율·개수·목록 모두 같은 칸 목록(getDayPracticeCells)에서 만든다
+  const cells = getDayPracticeCells(dateKey, record)
+  const rate = calculateDayPracticeRate(dateKey, record)
   const rateColor = rate >= 75 ? '#00B894' : rate >= 50 ? '#FDCB6E' : '#FF7675'
 
-  const routines = record.routines || {}
-  const allStatuses = Object.values(routines).map(v => v?.status).filter(Boolean)
-  const doneCount = allStatuses.filter(s => s === 'done').length
-  const skippedCount = allStatuses.filter(s => s === 'skipped').length
-  const missedCount = allStatuses.filter(s => s === 'missed').length
+  const doneCount = cells.filter(c => c.status === 'done').length
+  const skippedCount = cells.filter(c => c.status === 'skipped').length
+  const missedCount = cells.filter(c => c.status === 'missed').length
+  const pendingCount = cells.filter(c => c.status === null).length
 
-  // 목록 = 기록된 칸 전부. 위 개수와 항상 같도록 같은 기준(완료·건너뜀·미실행)으로 고른다
-  const recorded = Object.entries(routines).filter(([, v]) => COUNTED_STATUSES.includes(v?.status))
-  const hourlyEntries = recorded
-    .filter(([k]) => k.startsWith('test_'))
-    .sort(([a], [b]) => a.localeCompare(b))
-  const periodEntries = recorded
-    .filter(([k]) => !k.startsWith('test_'))
-    .sort(([a], [b]) => periodRank(a) - periodRank(b))
+  const hourlyEntries = cells
+    .filter(c => c.id.startsWith('test_'))
+    .sort((a, b) => a.id.localeCompare(b.id))
+  const periodEntries = cells
+    .filter(c => !c.id.startsWith('test_'))
+    .sort((a, b) => periodRank(a.id) - periodRank(b.id))
 
   return (
     <div>
@@ -877,16 +880,16 @@ function RecordDetail({ record }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 14 }}>
             <div style={{
               width: 60, height: 60, borderRadius: '50%', flexShrink: 0,
-              background: rate > 0 ? `${rateColor}22` : '#F5F5FA',
+              background: rate !== null ? `${rateColor}22` : '#F5F5FA',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 18, fontWeight: 800, color: rate > 0 ? rateColor : '#CCC',
+              fontSize: 18, fontWeight: 800, color: rate !== null ? rateColor : '#CCC',
             }}>
-              {rate > 0 ? `${rate}%` : '—'}
+              {rate !== null ? `${rate}%` : '—'}
             </div>
             <div>
               <div style={{ fontSize: 15, fontWeight: 700 }}>알람 실천율</div>
               <div style={{ fontSize: 13, color: '#A0A0B8', marginTop: 3 }}>
-                {rate === 100 ? '완벽한 하루!' : rate >= 75 ? '잘 했어요!' : rate >= 50 ? '괜찮은 하루' : rate > 0 ? '더 노력해봐요' : '아직 기록 없음'}
+                {rate === null ? '아직 기록 없음' : rate === 100 ? '완벽한 하루!' : rate >= 75 ? '잘 했어요!' : rate >= 50 ? '괜찮은 하루' : '더 노력해봐요'}
               </div>
             </div>
           </div>
@@ -895,6 +898,7 @@ function RecordDetail({ record }) {
               { label: '완료', count: doneCount, color: '#00B894', bg: '#E6FBF5' },
               { label: '건너뜀', count: skippedCount, color: '#9090B0', bg: '#F0F0F5' },
               { label: '미실행', count: missedCount, color: '#FF7675', bg: '#FFF0F0' },
+              ...(pendingCount > 0 ? [{ label: '응답 대기', count: pendingCount, color: '#6C5CE7', bg: '#F0EEFF' }] : []),
             ].map(({ label, count, color, bg }) => (
               <div key={label} style={{ flex: 1, textAlign: 'center', padding: '10px 4px', borderRadius: 10, background: bg }}>
                 <div style={{ fontSize: 20, fontWeight: 700, color }}>{count}</div>
@@ -995,7 +999,7 @@ function RecordDetail({ record }) {
               ⏰ 시간별 알람 ({hourlyEntries.length})
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {hourlyEntries.map(([k, v]) => {
+              {hourlyEntries.map(({ id: k, status }) => {
                 const hk = k.replace('test_', '')
                 const h = parseInt(hk, 10)
                 const dh = h === 0 ? 12 : h > 12 ? h - 12 : h
@@ -1004,7 +1008,7 @@ function RecordDetail({ record }) {
                     key={k}
                     label={`${h < 12 ? '오전' : '오후'} ${dh}:00`}
                     sublabel={TEST_HOURLY_BEHAVIORS[hk]?.title}
-                    status={v.status}
+                    status={status}
                   />
                 )
               })}
@@ -1019,7 +1023,7 @@ function RecordDetail({ record }) {
               🗓 시간대 알람 ({periodEntries.length})
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {periodEntries.map(([k, v]) => {
+              {periodEntries.map(({ id: k, status }) => {
                 const p = ALARM_PERIODS[k]
                 return (
                   <RoutineRow
@@ -1027,7 +1031,7 @@ function RecordDetail({ record }) {
                     icon={p?.icon}
                     iconGradient={p?.gradient}
                     label={p?.name ?? k}
-                    status={v.status}
+                    status={status}
                   />
                 )
               })}
@@ -1035,7 +1039,7 @@ function RecordDetail({ record }) {
           </div>
         </div>
       )}
-      {recorded.length === 0 && (
+      {cells.length === 0 && (
         <div className="section" style={{ paddingTop: 10, paddingBottom: 0 }}>
           <div className="card card-body" style={{ textAlign: 'center', fontSize: 13, color: '#A0A0B8' }}>
             기록된 알람이 없어요
@@ -1049,13 +1053,13 @@ function RecordDetail({ record }) {
 
 // ─── 공통 서브컴포넌트 ────────────────────────────────────────────────────────
 
-// 기록은 확정되면 고정이라 표시만 한다
+// 기록은 확정되면 고정이라 표시만 한다. status null = 이미 울렸지만 아직 응답·확정 전
 function RoutineRow({ icon, iconGradient, label, sublabel, status }) {
   const cfg = {
     done:    { bg: '#E6FBF5', color: '#00B894', text: '✅ 완료' },
     skipped: { bg: '#F0F0F5', color: '#9090B0', text: '✕ 건너뜀' },
     missed:  { bg: '#FFF0F0', color: '#FF7675', text: '❌ 미실행' },
-  }[status] || { bg: '#F5F5F5', color: '#C0C0D0', text: '— 기록 없음' }
+  }[status] || { bg: '#F0EEFF', color: '#6C5CE7', text: '⏳ 응답 대기' }
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>

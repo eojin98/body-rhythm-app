@@ -1,18 +1,10 @@
 // Pure functions for character state — import these anywhere including tests
-import { calculatePracticeRate } from './storage'
+import { calculateDayPracticeRate } from './storage'
 
 function dateKey(offsetDays = 0) {
   const d = new Date()
   d.setDate(d.getDate() - offsetDays)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-function recordRate(record) {
-  if (!record?.routines) return null
-  const entries = Object.values(record.routines)
-  if (!entries.length) return null
-  const done = entries.filter(r => r?.status === 'done').length
-  return done / entries.length
 }
 
 // ─── Core metrics ─────────────────────────────────────────────────────────────
@@ -27,31 +19,18 @@ export function getTotalDone(records) {
   return total
 }
 
-export function getTodayScore(records) {
-  const rate = recordRate(records[dateKey(0)])
-  return rate === null ? 0 : Math.round(rate * 100)
-}
-
-export function getWeekAvgScore(records) {
-  const scores = []
-  for (let i = 0; i < 7; i++) {
-    const rate = recordRate(records[dateKey(i)])
-    if (rate !== null) scores.push(rate * 100)
-  }
-  if (!scores.length) return 0
-  return Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
-}
-
 // Consecutive days with ≥50% done rate (today is skipped if no data yet)
+// 하루 실천률은 storage.calculateDayPracticeRate (하루 알람 목록 기준, 오늘은 이미 울린 칸까지)
 export function getCurrentStreak(records) {
   let streak = 0
   for (let i = 0; i < 365; i++) {
-    const rate = recordRate(records[dateKey(i)])
+    const key = dateKey(i)
+    const rate = calculateDayPracticeRate(key, records[key])
     if (rate === null) {
       if (i === 0) continue
       break
     }
-    if (rate >= 0.5) {
+    if (rate >= 50) {
       streak++
     } else if (i > 0) {
       break
@@ -72,11 +51,12 @@ function hasPracticeData(record) {
 
 /**
  * 어제까지 7일(오늘 제외) 실천률 평균(0~100). 집계할 날이 하루도 없으면 null.
+ * 캐릭터 화면의 '지난 7일 컨디션'과 '7일 평균'이 모두 이 값을 쓴다.
  *
  * - 오늘은 제외한다. 알람이 아직 안 울린 시간대에 오늘이 0%로 들어가면 같은 날 안에서도
  *   아침·저녁 mood가 달라져 추세 지표로 쓸 수 없기 때문이다.
- * - 하루 단위 실천률은 storage.calculatePracticeRate(record)를 그대로 쓴다.
- * - 기록이 없는 날은 0%로 센다 (분모는 달력 일수).
+ * - 하루 단위 실천률은 storage.calculateDayPracticeRate (분모 = 그날 켜진 알람 전체).
+ * - 기록이 없는 날(셀 칸이 없는 날)은 0%로 센다 (분모는 달력 일수).
  * - 시작일 = max(가입일, 이 기기의 가장 이른 기록일). 시작일 이후가 7일 미만이면
  *   그 일수로만 나눠, 가입 초반이나 새 기기 설치 직후 무조건 '지침'이 되지 않게 한다.
  *   (실천 기록은 기기 로컬 저장이라, 가입일만 쓰면 새 기기에서 빈 날이 0%로 잡힌다)
@@ -103,7 +83,7 @@ export function getWeeklyPracticeRate(records, signupAt = null) {
   for (let i = 1; i <= 7; i++) {   // 어제(i=1)부터 7일 전(i=7)까지
     const key = dateKey(i)
     if (key < startKey) break
-    sum += calculatePracticeRate(records[key])
+    sum += calculateDayPracticeRate(key, records[key]) ?? 0
     days++
   }
   if (days === 0) return null

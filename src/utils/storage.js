@@ -96,10 +96,15 @@ export function getRecords() {
   }
 }
 
+function notifyRecordsChanged() {
+  try { window.dispatchEvent(new CustomEvent('bodyrhythm:recordsChanged')) } catch {}
+}
+
 export function saveRecord(date, record) {
   const records = getRecords()
   records[date] = { ...records[date], ...record }
   localStorage.setItem(keys().records, JSON.stringify(records))
+  notifyRecordsChanged()
 }
 
 export function getRecord(date) {
@@ -126,47 +131,41 @@ function isMealEaten(meal) {
   return !meal.skipped
 }
 
-const ROUTINE_PERIOD_IDS = ['morning', 'afternoon', 'evening', 'bedtime']
+// ─── 하루 실천률 (하루 알람 목록 기준) ───────────────────────────────────────
+// 칸 = 기록된 칸(완료·건너뜀·미실행) + 그날 목록에서 대상인 칸. 오늘은 이미 울린 칸까지만.
+// 꺼둔 알람은 목록에 없으므로 분모에서 빠진다. 목록이 없는 날(새 규칙 적용 전)은 기록된 칸만 센다.
+const PRACTICE_STATUSES = ['done', 'skipped', 'missed']
 
-export function calculatePracticeRate(record) {
-  if (!record) return 0
-  // Test mode: use hourly test_ routines if present
-  const testEntries = Object.entries(record.routines || {}).filter(([k]) => k.startsWith('test_'))
-  if (testEntries.length > 0) {
-    const done = testEntries.filter(([, v]) => v?.status === 'done').length
-    return Math.round((done / testEntries.length) * 100)
+/**
+ * 그날 실천률을 셀 칸 목록. [{ id, status }] — status null = 이미 울렸지만 아직 응답·확정 전(응답 대기).
+ * 기록 탭 하루 상세의 목록·개수와 calculateDayPracticeRate가 모두 이 목록을 쓴다.
+ */
+export function getDayPracticeCells(dateKey, record, now = new Date()) {
+  const cells = new Map()
+  for (const [id, v] of Object.entries(record?.routines ?? {})) {
+    if (PRACTICE_STATUSES.includes(v?.status)) cells.set(id, v.status)
   }
-  // Regular mode: use entries with any explicit status as denominator
-  // (done, missed, skipped all count — null = not yet recorded)
-  const explicit = ROUTINE_PERIOD_IDS.filter(pid => record.routines?.[pid]?.status != null)
-  if (!explicit.length) return 0
-  const done = explicit.filter(pid => record.routines[pid].status === 'done').length
-  return Math.round((done / explicit.length) * 100)
+  const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  const nowMin = now.getHours() * 60 + now.getMinutes()
+  for (const e of getAlarmPlans()[dateKey] ?? []) {
+    if (!isPlanEntryLive(e)) continue
+    if (dateKey === todayKey && e.ringMin > nowMin) continue   // 오늘, 아직 안 울린 칸
+    if (!cells.has(e.id)) cells.set(e.id, null)
+  }
+  return [...cells].map(([id, status]) => ({ id, status }))
 }
 
-// Time-aware practice rate for home screen (only counts alarms that have already fired today)
-export function calculateTodayPracticeRate(record, settings, testBehaviorKeys) {
-  if (!record) return 0
-  const now = new Date()
-  const nowMins = now.getHours() * 60 + now.getMinutes()
+/** 그날 실천률(0~100) = 완료 칸 / 셀 칸. 셀 칸이 하나도 없으면 null. 앱 전체의 하루 실천률은 이 함수 하나로 계산한다. */
+export function calculateDayPracticeRate(dateKey, record, now = new Date()) {
+  const cells = getDayPracticeCells(dateKey, record, now)
+  if (!cells.length) return null
+  const done = cells.filter(c => c.status === 'done').length
+  return Math.round((done / cells.length) * 100)
+}
 
-  if (settings?.testMode && testBehaviorKeys) {
-    const fired = testBehaviorKeys.filter(hk => parseInt(hk, 10) * 60 <= nowMins)
-    if (!fired.length) return 0
-    const done = fired.filter(hk => record.routines?.[`test_${hk}`]?.status === 'done').length
-    return Math.round((done / fired.length) * 100)
-  }
-
-  const todayDay = now.getDay()
-  const alarms = settings?.alarms || []
-  const fired = alarms.filter(a => {
-    if (!a.enabled || !a.type || !a.days.includes(todayDay)) return false
-    const [h, m] = a.time.split(':').map(Number)
-    return h * 60 + m <= nowMins
-  })
-  if (!fired.length) return 0
-  const done = fired.filter(a => record.routines?.[a.type]?.status === 'done').length
-  return Math.round((done / fired.length) * 100)
+// 홈·캐릭터 '오늘 실천율' (이미 울린 알람 기준)
+export function calculateTodayPracticeRate(record) {
+  return calculateDayPracticeRate(getTodayKey(), record) ?? 0
 }
 
 export function getLastWeekDates() {
@@ -294,6 +293,7 @@ export function saveRoutineAction(dateKey, periodId, status, respondedAtMs = Dat
     },
   }
   localStorage.setItem(keys().records, JSON.stringify(records))
+  notifyRecordsChanged()
   return finalStatus
 }
 
@@ -347,7 +347,10 @@ export function markRoutinesMissed(idsByDate) {
     }
     records[dateKey] = { ...rec, routines }
   }
-  if (changed) localStorage.setItem(keys().records, JSON.stringify(records))
+  if (changed) {
+    localStorage.setItem(keys().records, JSON.stringify(records))
+    notifyRecordsChanged()
+  }
 }
 
 // --- 하루 알람 목록(계획) · 새 기록 규칙 적용 시작일 (recordReconcile에서 사용) ---
@@ -363,6 +366,7 @@ export function getAlarmPlans() {
 
 export function saveAlarmPlans(plans) {
   localStorage.setItem(keys().alarmPlans, JSON.stringify(plans))
+  notifyRecordsChanged()   // 분모(그날 알람 목록)가 바뀌므로 지표도 다시 계산해야 한다
 }
 
 export function getRecordRulesSince() {

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { getRecords, getLastWeekDates, calculatePracticeRate, getSettings } from '../utils/storage'
+import { getRecords, getLastWeekDates, calculateDayPracticeRate, getSettings } from '../utils/storage'
 import { ALARM_PERIODS, PERIOD_ORDER, getEffectiveBehaviors } from '../utils/alarmContent'
 
 const TABS = PERIOD_ORDER.map(id => ({ id, ...ALARM_PERIODS[id] }))
@@ -21,7 +21,7 @@ export default function Dashboard() {
       key,
       label,
       status: routineStatus,          // 'done' | 'skipped' | null
-      rate: rec ? calculatePracticeRate(rec) : null,
+      rate: calculateDayPracticeRate(key, rec),
       completed: rec?.completed ?? false,
     }
   })

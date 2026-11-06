@@ -172,8 +172,7 @@ export default function Home() {
     setTestAlarm(getActiveTestAlarm(settings.testMode, rec?.routines))
   }
 
-  const testBehaviorKeys = Object.keys(TEST_HOURLY_BEHAVIORS)
-  const practiceRate = calculateTodayPracticeRate(todayRecord, settings, testBehaviorKeys)
+  const practiceRate = calculateTodayPracticeRate(todayRecord)
   const nextAlarm = getNextAlarm(settings.alarms)
 
   // Fired test alarms for today (test mode)

@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { getRecords } from '../utils/storage'
+import { getRecords, getTodayKey, calculateTodayPracticeRate } from '../utils/storage'
 import {
-  getTotalDone, getCurrentStreak, getWeekAvgScore, getTodayScore,
+  getTotalDone, getCurrentStreak,
   getWeeklyPracticeRate, getMood, MOODS,
   getStage, getStageProgress, getCharacterImage,
   getAcknowledgedStage, setAcknowledgedStage,
@@ -26,7 +26,7 @@ const cardIconBtnStyle = {
 export default function Character() {
   const navigate = useNavigate()
   const { profile, user } = useAuth()
-  const [records] = useState(() => getRecords())
+  const [records, setRecords] = useState(() => getRecords())
   const [showEvolveAnim, setShowEvolveAnim] = useState(false)
   const [evolvedStage, setEvolvedStage] = useState(null)
   const [imgError, setImgError] = useState(false)
@@ -36,10 +36,21 @@ export default function Character() {
   const characterId = profile?.character_id ?? null
   const characterName = profile?.character_name ?? ''
 
+  // 화면에 머무는 동안 기록·알람 목록이 바뀌면 다시 읽는다. 오늘 실천율은 '이미 울린 알람' 기준이라
+  // 기록이 그대로여도 시각이 지나면 달라지므로 1분마다도 다시 계산한다.
+  useEffect(() => {
+    const refresh = () => setRecords(getRecords())
+    window.addEventListener('bodyrhythm:recordsChanged', refresh)
+    const id = setInterval(refresh, 60_000)
+    return () => {
+      window.removeEventListener('bodyrhythm:recordsChanged', refresh)
+      clearInterval(id)
+    }
+  }, [])
+
   const totalDone = getTotalDone(records)
   const streak = getCurrentStreak(records)
-  const weekAvg = getWeekAvgScore(records)
-  const todayScore = getTodayScore(records)
+  const todayScore = calculateTodayPracticeRate(records[getTodayKey()])
   const weeklyRate = getWeeklyPracticeRate(records, user?.created_at)
   const mood = getMood(weeklyRate)
   const moodDef = MOODS.find(m => m.mood === mood) ?? MOODS[MOODS.length - 1]
@@ -248,7 +259,7 @@ export default function Character() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           {[
             { label: '오늘 실천율', value: `${todayScore}%`, icon: '📅', color: '#6C5CE7' },
-            { label: '7일 평균',    value: `${weekAvg}%`,    icon: '📊', color: '#00B894' },
+            { label: '7일 평균',    value: weeklyRate != null ? `${weeklyRate}%` : '집계 전', icon: '📊', color: '#00B894' },
             { label: '연속 달성',   value: `${streak}일`,    icon: '🔥', color: '#E17055' },
             { label: '총 완료',     value: `${totalDone}회`, icon: '✅', color: '#FDCB6E' },
           ].map(({ label, value, icon, color }) => (
