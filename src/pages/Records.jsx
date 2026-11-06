@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  getRecords, calculatePracticeRate, saveRoutineAction, clearRoutineAction,
+  getRecords, calculatePracticeRate,
   DAY_NAMES, getTodayKey, getLastWeekDates, getSettings,
 } from '../utils/storage'
 import { ALARM_PERIODS, PERIOD_ORDER, TEST_HOURLY_BEHAVIORS, getEffectiveBehaviors } from '../utils/alarmContent'
@@ -844,9 +844,13 @@ function MonthView({ date, records, todayKey, onGoToDay }) {
 
 // ─── 하루 상세 기록 ───────────────────────────────────────────────────────────
 
-function RecordDetail({ record, dateKey, onUpdate }) {
-  const [editingKey, setEditingKey] = useState(null)
+const COUNTED_STATUSES = ['done', 'skipped', 'missed']
+const periodRank = id => {
+  const i = PERIOD_ORDER.indexOf(id)
+  return i === -1 ? PERIOD_ORDER.length : i
+}
 
+function RecordDetail({ record }) {
   const rate = calculatePracticeRate(record)
   const rateColor = rate >= 75 ? '#00B894' : rate >= 50 ? '#FDCB6E' : '#FF7675'
 
@@ -856,17 +860,14 @@ function RecordDetail({ record, dateKey, onUpdate }) {
   const skippedCount = allStatuses.filter(s => s === 'skipped').length
   const missedCount = allStatuses.filter(s => s === 'missed').length
 
-  const testEntries = Object.entries(routines)
+  // 목록 = 기록된 칸 전부. 위 개수와 항상 같도록 같은 기준(완료·건너뜀·미실행)으로 고른다
+  const recorded = Object.entries(routines).filter(([, v]) => COUNTED_STATUSES.includes(v?.status))
+  const hourlyEntries = recorded
     .filter(([k]) => k.startsWith('test_'))
     .sort(([a], [b]) => a.localeCompare(b))
-  const hasTest = testEntries.length > 0
-
-  const handleEdit = (id, status) => {
-    if (status === null) clearRoutineAction(dateKey, id)
-    else saveRoutineAction(dateKey, id, status)
-    setEditingKey(null)
-    onUpdate()
-  }
+  const periodEntries = recorded
+    .filter(([k]) => !k.startsWith('test_'))
+    .sort(([a], [b]) => periodRank(a) - periodRank(b))
 
   return (
     <div>
@@ -986,57 +987,70 @@ function RecordDetail({ record, dateKey, onUpdate }) {
         </div>
       )}
 
-      {/* 루틴 목록 */}
-      <div className="section" style={{ paddingTop: 10 }}>
-        <div className="card card-body">
-          <div style={{ fontSize: 13, fontWeight: 600, color: '#6E6E8A', marginBottom: 12 }}>
-            {hasTest ? '⏰ 시간별 알람 실천' : '루틴 실천'}
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {hasTest
-              ? testEntries.map(([k, v]) => {
-                  const hk = k.replace('test_', '')
-                  const h = parseInt(hk, 10)
-                  const dh = h === 0 ? 12 : h > 12 ? h - 12 : h
-                  return (
-                    <RoutineRow
-                      key={k}
-                      label={`${h < 12 ? '오전' : '오후'} ${dh}:00`}
-                      sublabel={TEST_HOURLY_BEHAVIORS[hk]?.title}
-                      status={v?.status || null}
-                      isEditing={editingKey === k}
-                      onEdit={() => setEditingKey(k)}
-                      onSave={(s) => handleEdit(k, s)}
-                      onCancel={() => setEditingKey(null)}
-                    />
-                  )
-                })
-              : PERIOD_ORDER.map(pid => {
-                  const p = ALARM_PERIODS[pid]
-                  return (
-                    <RoutineRow
-                      key={pid}
-                      icon={p.icon}
-                      iconGradient={p.gradient}
-                      label={p.name}
-                      status={record.routines?.[pid]?.status || null}
-                      isEditing={editingKey === pid}
-                      onEdit={() => setEditingKey(pid)}
-                      onSave={(s) => handleEdit(pid, s)}
-                      onCancel={() => setEditingKey(null)}
-                    />
-                  )
-                })}
+      {/* 알람 기록 목록 */}
+      {hourlyEntries.length > 0 && (
+        <div className="section" style={{ paddingTop: 10, paddingBottom: 0 }}>
+          <div className="card card-body">
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#6E6E8A', marginBottom: 12 }}>
+              ⏰ 시간별 알람 ({hourlyEntries.length})
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {hourlyEntries.map(([k, v]) => {
+                const hk = k.replace('test_', '')
+                const h = parseInt(hk, 10)
+                const dh = h === 0 ? 12 : h > 12 ? h - 12 : h
+                return (
+                  <RoutineRow
+                    key={k}
+                    label={`${h < 12 ? '오전' : '오후'} ${dh}:00`}
+                    sublabel={TEST_HOURLY_BEHAVIORS[hk]?.title}
+                    status={v.status}
+                  />
+                )
+              })}
+            </div>
           </div>
         </div>
-      </div>
+      )}
+      {periodEntries.length > 0 && (
+        <div className="section" style={{ paddingTop: 10, paddingBottom: 0 }}>
+          <div className="card card-body">
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#6E6E8A', marginBottom: 12 }}>
+              🗓 시간대 알람 ({periodEntries.length})
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {periodEntries.map(([k, v]) => {
+                const p = ALARM_PERIODS[k]
+                return (
+                  <RoutineRow
+                    key={k}
+                    icon={p?.icon}
+                    iconGradient={p?.gradient}
+                    label={p?.name ?? k}
+                    status={v.status}
+                  />
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+      {recorded.length === 0 && (
+        <div className="section" style={{ paddingTop: 10, paddingBottom: 0 }}>
+          <div className="card card-body" style={{ textAlign: 'center', fontSize: 13, color: '#A0A0B8' }}>
+            기록된 알람이 없어요
+          </div>
+        </div>
+      )}
+      <div style={{ height: 10 }} />
     </div>
   )
 }
 
 // ─── 공통 서브컴포넌트 ────────────────────────────────────────────────────────
 
-function RoutineRow({ icon, iconGradient, label, sublabel, status, isEditing, onEdit, onSave, onCancel }) {
+// 기록은 확정되면 고정이라 표시만 한다
+function RoutineRow({ icon, iconGradient, label, sublabel, status }) {
   const cfg = {
     done:    { bg: '#E6FBF5', color: '#00B894', text: '✅ 완료' },
     skipped: { bg: '#F0F0F5', color: '#9090B0', text: '✕ 건너뜀' },
@@ -1057,24 +1071,12 @@ function RoutineRow({ icon, iconGradient, label, sublabel, status, isEditing, on
         <div style={{ fontSize: 13, fontWeight: 600 }}>{label}</div>
         {sublabel && <div style={{ fontSize: 11, color: '#A0A0B8' }}>{sublabel}</div>}
       </div>
-      {!isEditing ? (
-        <button
-          onClick={onEdit}
-          style={{
-            fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 20, border: 'none',
-            cursor: 'pointer', background: cfg.bg, color: cfg.color,
-          }}
-        >
-          {cfg.text} ✏️
-        </button>
-      ) : (
-        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-          <button className="btn btn-primary btn-sm" style={{ padding: '4px 8px', fontSize: 11 }} onClick={() => onSave('done')}>완료</button>
-          <button className="btn btn-ghost btn-sm" style={{ padding: '4px 8px', fontSize: 11, background: '#F0F0F5', color: '#9090B0' }} onClick={() => onSave('skipped')}>건너뜀</button>
-          {status && <button className="btn btn-ghost btn-sm" style={{ padding: '4px 8px', fontSize: 11 }} onClick={() => onSave(null)}>삭제</button>}
-          <button className="btn btn-ghost btn-sm" style={{ padding: '4px 8px', fontSize: 11 }} onClick={onCancel}>취소</button>
-        </div>
-      )}
+      <span style={{
+        fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 20,
+        background: cfg.bg, color: cfg.color,
+      }}>
+        {cfg.text}
+      </span>
     </div>
   )
 }

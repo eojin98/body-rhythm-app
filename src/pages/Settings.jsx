@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
 import { useAuth } from '../context/AuthContext'
-import { getSettings, saveSettings, DAY_NAMES, APP_VERSION, exportAllData, importAllData } from '../utils/storage'
+import { getSettings, saveSettings, DAY_NAMES, APP_VERSION, exportAllData } from '../utils/storage'
 import { clearLedger, getAllEntries, getUnsyncedEntries } from '../utils/pointLedger'
 import { getServerTotalPoints, syncPointsToServer, syncFromServer } from '../lib/pointSync'
 import {
@@ -44,7 +44,6 @@ export default function Settings() {
   const { user, signOut } = useAuth()
   const [settings, setSettings] = useState(getSettings)
   const [notifStatus, setNotifStatus] = useState(getPermissionStatus)
-  const [importMsg, setImportMsg] = useState(null)
   const [batteryIgnored, setBatteryIgnored] = useState(true)
   const [exactAlarmOk, setExactAlarmOk] = useState(true)
   const [fsiGranted, setFsiGranted] = useState(true)
@@ -61,7 +60,6 @@ export default function Settings() {
     total: getAllEntries().length,
     unsynced: getUnsyncedEntries().length,
   }))
-  const fileInputRef = useRef(null)
 
   useEffect(() => {
     checkPermissionStatusAsync().then(setNotifStatus)
@@ -141,26 +139,6 @@ export default function Settings() {
     a.download = `bodyrhythm_backup_${new Date().toISOString().slice(0, 10)}.json`
     a.click()
     URL.revokeObjectURL(url)
-  }
-
-  const handleImport = (e) => {
-    const file = e.target.files[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = (evt) => {
-      try {
-        const data = JSON.parse(evt.target.result)
-        importAllData(data)
-        const restored = getSettings()
-        setSettings(restored)
-        setImportMsg({ type: 'success', text: '데이터를 성공적으로 가져왔습니다. 앱을 새로고침하면 모두 적용됩니다.' })
-        syncAllAlarmNotifications(restored.alarms, restored.testMode)
-      } catch {
-        setImportMsg({ type: 'error', text: '파일을 읽는 중 오류가 발생했습니다. 올바른 백업 파일인지 확인하세요.' })
-      }
-      e.target.value = ''
-    }
-    reader.readAsText(file)
   }
 
   const handleBehaviorChange = (periodId, behaviors) => {
@@ -507,36 +485,6 @@ export default function Settings() {
           <div style={{ fontSize: 12, color: '#A0A0B8', lineHeight: 1.5, paddingLeft: 4 }}>
             설정, 기록 등 모든 데이터를 JSON 파일로 저장합니다.
           </div>
-          <div style={{ height: 1, background: '#F0EFF8', margin: '2px 0' }} />
-          <button
-            className="btn"
-            onClick={() => { setImportMsg(null); fileInputRef.current?.click() }}
-            style={{ width: '100%', background: '#F0F8FF', color: '#0984E3', fontWeight: 600, padding: '12px', borderRadius: 12, border: 'none', cursor: 'pointer', fontSize: 14 }}
-          >
-            📥 데이터 가져오기
-          </button>
-          <div style={{ fontSize: 12, color: '#A0A0B8', lineHeight: 1.5, paddingLeft: 4 }}>
-            백업 JSON 파일을 불러와 데이터를 복원합니다. 기존 데이터는 덮어씌워집니다.
-          </div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".json,application/json"
-            style={{ display: 'none' }}
-            onChange={handleImport}
-          />
-          {importMsg && (
-            <div style={{
-              padding: '10px 12px',
-              background: importMsg.type === 'success' ? '#E8F8F0' : '#FFE8E8',
-              borderRadius: 10,
-              fontSize: 13,
-              color: importMsg.type === 'success' ? '#00B894' : '#FF7675',
-              lineHeight: 1.5,
-            }}>
-              {importMsg.type === 'success' ? '✅' : '❌'} {importMsg.text}
-            </div>
-          )}
         </div>
       </div>
 

@@ -5,10 +5,10 @@ import {
   getSettings, saveSettings, getRecord, getTodayKey,
   calculateTodayPracticeRate, getNextAlarm, timeUntil,
   formatTime12, DAY_NAMES,
-  saveRoutineAction, clearRoutineAction, getSnooze, setSnooze,
-  autoMarkMissedRoutines, getCheckinStatus,
+  saveRoutineAction, getSnooze, setSnooze, getCheckinStatus,
 } from '../utils/storage'
-import { recordPoint, removeEntriesForAlarm, POINT_POLICY } from '../utils/pointLedger'
+import { recordPoint, POINT_POLICY } from '../utils/pointLedger'
+import { reconcileRecords } from '../utils/recordReconcile'
 import {
   getPermissionStatus,
   checkPermissionStatusAsync,
@@ -29,8 +29,7 @@ function getActiveTestAlarm(testMode, todayRoutines) {
   const behavior = TEST_HOURLY_BEHAVIORS[hourKey]
   if (!behavior) return null
   const routineKey = `test_${hourKey}`
-  const routine = todayRoutines?.[routineKey]
-  if (routine?.status === 'done' || routine?.status === 'skipped') return null
+  if (todayRoutines?.[routineKey]?.status) return null
   const snoozeUntil = getSnooze(routineKey)
   if (snoozeUntil && Date.now() < snoozeUntil) return null
   return { hourKey, behavior }
@@ -50,8 +49,7 @@ function getActiveRoutineAlarm(alarms, todayRoutines) {
     })
     .filter(a => a.diffMins >= 0 && a.diffMins <= 120)
     .filter(a => {
-      const routine = todayRoutines?.[a.type]
-      if (routine?.status === 'done' || routine?.status === 'skipped') return false
+      if (todayRoutines?.[a.type]?.status) return false
       const snoozeUntil = getSnooze(a.type)
       if (snoozeUntil && Date.now() < snoozeUntil) return false
       return true
@@ -97,8 +95,8 @@ export default function Home() {
       setActiveAlarm(getActiveRoutineAlarm(s.alarms, rec?.routines))
       setTestAlarm(getActiveTestAlarm(s.testMode, rec?.routines))
 
-      // Auto-mark unchecked past alarms as 'missed'
-      autoMarkMissedRoutines(s, testBehaviorKeysConst)
+      // 확정 시점이 지난 빈칸을 미실행으로 기록 (강화알람 대기 응답을 먼저 반영)
+      reconcileRecords()
 
       // Test mode: fire browser notification at the start of each hour
       if (s.testMode && !Capacitor.isNativePlatform()) {
@@ -145,17 +143,17 @@ export default function Home() {
       if (alm?.time) firstFiredAtMs = new Date(`${today}T${alm.time}:00`).getTime()
     }
 
+    // 이미 기록된 칸이면(null) 기록도 포인트도 바꾸지 않는다
     if (action === 'done') {
-      saveRoutineAction(today, periodId, 'done')
-      const isLate = firstFiredAtMs != null && (Date.now() - firstFiredAtMs) > POINT_POLICY.REACTION_DEADLINE_MS
-      recordPoint({ date: today, alarmId: periodId, action: isLate ? 'normal_complete_late' : 'normal_complete', points: isLate ? 0 : undefined })
+      if (saveRoutineAction(today, periodId, 'done')) {
+        const isLate = firstFiredAtMs != null && (Date.now() - firstFiredAtMs) > POINT_POLICY.REACTION_DEADLINE_MS
+        recordPoint({ date: today, alarmId: periodId, action: isLate ? 'normal_complete_late' : 'normal_complete', points: isLate ? 0 : undefined })
+      }
     } else if (action === 'skipped') {
-      saveRoutineAction(today, periodId, 'skipped')
-      // 건너뜀 = 0P. 사유 추적을 위해 0P도 원장에 기록한다(policy 4 변경).
-      recordPoint({ date: today, alarmId: periodId, action: 'normal_skipped', points: 0 })
-    } else if (action === 'clear') {
-      clearRoutineAction(today, periodId)
-      removeEntriesForAlarm(today, periodId)
+      if (saveRoutineAction(today, periodId, 'skipped')) {
+        // 건너뜀 = 0P. 사유 추적을 위해 0P도 원장에 기록한다(policy 4 변경).
+        recordPoint({ date: today, alarmId: periodId, action: 'normal_skipped', points: 0 })
+      }
     } else if (action === 'snooze') {
       setSnooze(periodId, Date.now() + snoozeMins * 60 * 1000)
       if (periodId.startsWith('test_')) {
@@ -184,6 +182,7 @@ export default function Home() {
   const firedTestAlarms = settings.testMode
     ? Object.entries(TEST_HOURLY_BEHAVIORS)
         .filter(([hk]) => parseInt(hk, 10) * 60 <= nowMins2)
+        .filter(([hk]) => settings.hourlyAlarmSettings?.[hk]?.enabled !== false)
         .map(([hk, behavior]) => ({
           hk,
           behavior,
@@ -506,22 +505,28 @@ export default function Home() {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: 600 }}>{timeLabel} — {behavior.title}</div>
                     </div>
-                    {!isEditing ? (
+                    {status ? (
+                      // 기록된 칸은 고정 — 표시만 한다
+                      <span style={{
+                        fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 20,
+                        background: RECORDED_BADGE[status]?.background, color: RECORDED_BADGE[status]?.color,
+                      }}>
+                        {RECORDED_BADGE[status]?.text}
+                      </span>
+                    ) : !isEditing ? (
                       <button
                         onClick={() => setEditingKey(routineKey)}
                         style={{
                           fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 20, border: 'none', cursor: 'pointer',
-                          background: status === 'done' ? '#E6FBF5' : status === 'skipped' ? '#FFF8E6' : '#F0F0F8',
-                          color: status === 'done' ? '#00B894' : status === 'skipped' ? '#E67E22' : '#A0A0B8',
+                          background: '#F0F0F8', color: '#A0A0B8',
                         }}
                       >
-                        {status === 'done' ? '✅ 완료' : status === 'skipped' ? '⏭ 건너뜀' : '— 기록없음'} ✏️
+                        — 기록없음 ✏️
                       </button>
                     ) : (
                       <div style={{ display: 'flex', gap: 4 }}>
                         <button className="btn btn-primary btn-sm" style={{ padding: '4px 8px', fontSize: 11 }} onClick={() => { handleRoutineAction(routineKey, 'done'); setEditingKey(null) }}>완료 ✓</button>
                         <button className="btn btn-ghost btn-sm" style={{ padding: '4px 8px', fontSize: 11, background: '#FFF8E6', color: '#E67E22' }} onClick={() => { handleRoutineAction(routineKey, 'skipped'); setEditingKey(null) }}>건너뜀</button>
-                        {status && <button className="btn btn-ghost btn-sm" style={{ padding: '4px 8px', fontSize: 11 }} onClick={() => { handleRoutineAction(routineKey, 'clear'); setEditingKey(null) }}>삭제</button>}
                         <button className="btn btn-ghost btn-sm" style={{ padding: '4px 8px', fontSize: 11 }} onClick={() => setEditingKey(null)}>취소</button>
                       </div>
                     )}
@@ -554,13 +559,11 @@ export default function Home() {
                   <div className="alarm-info" style={{ flex: 1 }}>
                     <div className="alarm-name">{alarm.name}</div>
                     <div className="alarm-time">{formatTime12(alarm.time)}</div>
-                    {routineStatus && !isEditing && (
-                      <button
-                        onClick={() => setEditingKey(alarm.type)}
-                        style={{ marginTop: 2, fontSize: 11, color: routineStatus === 'done' ? '#00B894' : '#E67E22', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
-                      >
-                        {routineStatus === 'done' ? '✅ 완료' : '⏭ 건너뜀'} (수정)
-                      </button>
+                    {routineStatus && (
+                      // 기록된 칸은 고정 — 표시만 한다
+                      <div style={{ marginTop: 2, fontSize: 11, fontWeight: 600, color: RECORDED_BADGE[routineStatus]?.color }}>
+                        {RECORDED_BADGE[routineStatus]?.text}
+                      </div>
                     )}
                     {alarm.past && !routineStatus && !isEditing && (
                       <button
@@ -570,11 +573,10 @@ export default function Home() {
                         — 기록 입력
                       </button>
                     )}
-                    {isEditing && (
+                    {isEditing && !routineStatus && (
                       <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
                         <button className="btn btn-primary btn-sm" style={{ padding: '4px 8px', fontSize: 11 }} onClick={() => { handleRoutineAction(alarm.type, 'done'); setEditingKey(null) }}>완료 ✓</button>
                         <button className="btn btn-ghost btn-sm" style={{ padding: '4px 8px', fontSize: 11, background: '#FFF8E6', color: '#E67E22' }} onClick={() => { handleRoutineAction(alarm.type, 'skipped'); setEditingKey(null) }}>건너뜀</button>
-                        {routineStatus && <button className="btn btn-ghost btn-sm" style={{ padding: '4px 8px', fontSize: 11 }} onClick={() => { handleRoutineAction(alarm.type, 'clear'); setEditingKey(null) }}>삭제</button>}
                         <button className="btn btn-ghost btn-sm" style={{ padding: '4px 8px', fontSize: 11 }} onClick={() => setEditingKey(null)}>취소</button>
                       </div>
                     )}
@@ -597,7 +599,12 @@ export default function Home() {
   )
 }
 
-const testBehaviorKeysConst = Object.keys(TEST_HOURLY_BEHAVIORS)
+// 기록된 칸의 표시 (완료 / 건너뜀 / 미실행)
+const RECORDED_BADGE = {
+  done:    { background: '#E6FBF5', color: '#00B894', text: '✅ 완료' },
+  skipped: { background: '#FFF8E6', color: '#E67E22', text: '⏭ 건너뜀' },
+  missed:  { background: '#FFF0F0', color: '#FF7675', text: '❌ 미실행' },
+}
 
 // ─── Active Routine Card ───────────────────────────────────────────────────────
 

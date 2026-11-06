@@ -18,7 +18,8 @@ import {
   scheduleSnoozeNotification,
   scheduleTestSnoozeNotification,
 } from './utils/notifications'
-import { syncPendingBoostActions, getActiveTimerState } from './utils/boostAlarm'
+import { getActiveTimerState } from './utils/boostAlarm'
+import { reconcileRecords } from './utils/recordReconcile'
 import { syncPointsToServer, syncFromServer } from './lib/pointSync'
 import { TEST_HOURLY_BEHAVIORS } from './utils/alarmContent'
 import { recordPoint, POINT_POLICY } from './utils/pointLedger'
@@ -157,9 +158,6 @@ function AppContent() {
     if (!authReady || !Capacitor.isNativePlatform()) return
     if (!getSettings().onboardingComplete) return
 
-    // Sync any done/skipped actions recorded by BoostAlarmActivity while app was dead
-    syncPendingBoostActions()
-
     const refreshTimer = async () => {
       try {
         const state = await getActiveTimerState()
@@ -178,11 +176,12 @@ function AppContent() {
         // 기한에는 스누즈로 미룬 누적 시간을 더해준다 (안 그러면 30분 스누즈는 무조건 0P가 된다).
         const isLate = firstFiredAtMs != null
           && (Date.now() - firstFiredAtMs) > POINT_POLICY.REACTION_DEADLINE_MS + snoozeExtraMs
+        // 이미 기록된 칸이면(null) 기록도 포인트도 바꾸지 않는다
         if (action === 'done') {
-          saveRoutineAction(date, periodId, 'done')
+          if (!saveRoutineAction(date, periodId, 'done')) return
           recordPoint({ date, alarmId: periodId, action: isLate ? 'normal_complete_late' : 'normal_complete', points: isLate ? 0 : undefined })
         } else if (action === 'skipped') {
-          saveRoutineAction(date, periodId, 'skipped')
+          if (!saveRoutineAction(date, periodId, 'skipped')) return
           // 건너뜀 = 0P. 사유 추적을 위해 0P도 원장에 기록한다(policy 4 변경).
           recordPoint({ date, alarmId: periodId, action: 'normal_skipped', points: 0 })
         } else if (action === 'snooze') {
@@ -201,9 +200,10 @@ function AppContent() {
     )
 
     // 앱이 백그라운드에서 포그라운드로 복귀할 때 재동기화
+    // (reconcileRecords = 강화알람 대기 응답 반영 → 미실행 확정)
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        syncPendingBoostActions()
+        reconcileRecords()
         syncPointsToServer()
         refreshTimer()
       }
@@ -213,7 +213,7 @@ function AppContent() {
     // Capacitor appStateChange: BoostAlarmActivity → MainActivity 전환 시
     // visibilitychange가 발화하지 않는 경우를 위한 이중 안전장치
     const appStateHandle = CapApp.addListener('appStateChange', ({ isActive }) => {
-      if (isActive) { syncPendingBoostActions(); syncPointsToServer(); refreshTimer() }
+      if (isActive) { reconcileRecords(); syncPointsToServer(); refreshTimer() }
     })
 
     return () => {
@@ -223,6 +223,17 @@ function AppContent() {
     }
     // authLoading은 true→false로 한 번만, onboardingDone도 false→true로 한 번만 바뀐다.
     // 따라서 재실행은 최대 두 번이고, 매번 이전 등록을 위 cleanup으로 해제한 뒤 다시 등록한다.
+  }, [authReady, onboardingDone])
+
+  // ─── 기록 정리: 앱 시작 · 설정 변경 시 미실행 확정 ───────────────────────────
+  // 강화알람 대기 응답 반영(포인트 기록 포함)이 함께 돌기 때문에 세션 복원 뒤에 실행한다.
+  // 포그라운드 복귀 때는 위 네이티브 핸들러가, 홈 화면에서는 10초 tick이 같은 함수를 부른다.
+  useEffect(() => {
+    if (!authReady || !getSettings().onboardingComplete) return
+    reconcileRecords()
+    const onSettingsChanged = () => reconcileRecords()
+    window.addEventListener('bodyrhythm:settingsChanged', onSettingsChanged)
+    return () => window.removeEventListener('bodyrhythm:settingsChanged', onSettingsChanged)
   }, [authReady, onboardingDone])
 
   // ─── 인증 로딩 (세션 복원 중, 보통 수십ms) + 프로필 로딩 ─────────────────────

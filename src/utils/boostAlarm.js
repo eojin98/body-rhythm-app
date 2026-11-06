@@ -99,27 +99,29 @@ export async function syncPendingBoostActions() {
       const timerExtra = action === 'timer_complete' ? (timerSeconds || 0) * 1000 : 0
       const isLate = firedAt != null && (respondedAtMs - firedAt) > POINT_POLICY.REACTION_DEADLINE_MS + timerExtra
       const legacySuffix = isLate && usedLegacyFallback ? '_legacy' : ''
+      // 기록은 실제 응답 시각 기준으로 확정한다. 이미 기록된 칸이면(null) 포인트도 다시 주지 않는다.
       if (action === 'done') {
-        saveRoutineAction(date, periodId, 'done')
+        if (!saveRoutineAction(date, periodId, 'done', respondedAtMs)) continue
         recordPoint({
           date, alarmId: periodId,
           action: isLate ? `boost_complete_late${legacySuffix}` : 'boost_complete',
           occurrenceId, points: isLate ? 0 : undefined,
         })
       } else if (action === 'timer_complete') {
-        saveRoutineAction(date, periodId, 'done')
+        // 타이머를 시작한 시각을 응답 시각으로 본다
+        if (!saveRoutineAction(date, periodId, 'done', respondedAtMs - (timerSeconds || 0) * 1000)) continue
         recordPoint({
           date, alarmId: periodId,
           action: isLate ? `boost_timer_complete_late${legacySuffix}` : 'boost_timer_complete',
           timerSeconds: isLate ? null : timerSeconds, occurrenceId, points: isLate ? 0 : undefined,
         })
       } else if (action === 'skipped') {
-        saveRoutineAction(date, periodId, 'skipped')
+        if (!saveRoutineAction(date, periodId, 'skipped', respondedAtMs)) continue
         // 건너뜀 = 0P. 사유 추적을 위해 0P도 원장에 기록한다(policy 4 변경).
         recordPoint({ date, alarmId: periodId, action: 'boost_skipped', occurrenceId, points: 0 })
       } else if (action === 'timeout') {
-        saveRoutineAction(date, periodId, 'skipped')
-        // 60초 무응답 자동 종료 — 사용자가 직접 건너뛴 것과 구분해서 기록한다.
+        // 60초 무응답 자동 종료 — 응답이 없었으므로 미실행. 포인트 원장 사유는 boost_timeout 그대로.
+        if (!saveRoutineAction(date, periodId, 'missed', respondedAtMs)) continue
         recordPoint({ date, alarmId: periodId, action: 'boost_timeout', occurrenceId, points: 0 })
       }
     }

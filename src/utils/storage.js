@@ -18,6 +18,8 @@ function keys() {
     records: `${id}_records`,
     notifLog: `${id}_notif_log`,
     snooze: `${id}_snooze`,
+    alarmPlans: `${id}_alarm_plans`,
+    recordRulesSince: `${id}_record_rules_since`,
   }
 }
 
@@ -81,6 +83,8 @@ export function getSettings() {
 
 export function saveSettings(settings) {
   localStorage.setItem(keys().settings, JSON.stringify(settings))
+  // 그날 알람 목록(recordReconcile)이 바뀐 설정을 바로 반영하도록 알린다
+  try { window.dispatchEvent(new CustomEvent('bodyrhythm:settingsChanged')) } catch {}
 }
 
 export function getRecords() {
@@ -274,26 +278,38 @@ export function setCheckinSkipped(dateKey) {
 
 // --- Routine actions (완료/건너뛰기 per period per day) ---
 
-export function saveRoutineAction(dateKey, periodId, status) {
+// 한번 기록된 칸은 바꾸지 않는다(먼저 기록된 값이 최종).
+// 응답 시각이 그날 알람 목록의 확정 시점 이후면 늦은 응답이므로 'missed'로 기록한다.
+// 반환값: 실제로 기록한 상태. 이미 기록돼 있던 칸이면 null.
+export function saveRoutineAction(dateKey, periodId, status, respondedAtMs = Date.now()) {
   const records = getRecords()
   const record = records[dateKey] || {}
+  if (record.routines?.[periodId]?.status) return null
+  const finalStatus = isAfterDeadline(dateKey, periodId, respondedAtMs) ? 'missed' : status
   records[dateKey] = {
     ...record,
     routines: {
       ...record.routines,
-      [periodId]: { status, updatedAt: new Date().toISOString() },
+      [periodId]: { status: finalStatus, updatedAt: new Date().toISOString() },
     },
   }
   localStorage.setItem(keys().records, JSON.stringify(records))
+  return finalStatus
 }
 
-export function clearRoutineAction(dateKey, periodId) {
-  const records = getRecords()
-  const record = records[dateKey]
-  if (!record?.routines?.[periodId]) return
-  const { [periodId]: _removed, ...rest } = record.routines
-  records[dateKey] = { ...record, routines: rest }
-  localStorage.setItem(keys().records, JSON.stringify(records))
+/** 목록에 들어온 뒤에 울리는 칸만 미실행 확정·늦은 응답 판정 대상이다. */
+export function isPlanEntryLive(entry) {
+  return entry.ringMin >= entry.sinceMin
+}
+
+// 그날 목록에 없거나 대상이 아닌 칸에 대한 응답은 그대로 기록한다(거부·변환하지 않음)
+function isAfterDeadline(dateKey, periodId, respondedAtMs) {
+  const entry = getAlarmPlans()[dateKey]?.find(e => e.id === periodId)
+  if (!entry || !isPlanEntryLive(entry)) return false
+  const t = new Date(respondedAtMs)
+  const respondedKey = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`
+  if (respondedKey !== dateKey) return respondedKey > dateKey
+  return t.getHours() * 60 + t.getMinutes() >= entry.deadlineMin
 }
 
 // --- Snooze state (나중에 — temporary, not stored in daily records) ---
@@ -315,47 +331,46 @@ export function setSnooze(periodId, untilMs) {
   } catch {}
 }
 
-// Auto-mark past alarms with no status as 'missed'
-// Call from Home tick. testHourKeys = Object.keys(TEST_HOURLY_BEHAVIORS)
-export function autoMarkMissedRoutines(settings, testHourKeys = []) {
-  if (!settings) return
-  const today = getTodayKey()
-  const now = new Date()
-  const nowMins = now.getHours() * 60 + now.getMinutes()
-  const todayDay = now.getDay()
-  const record = getRecord(today)
-
-  const toMark = []
-
-  if (settings.testMode) {
-    // Test mode: past complete hours (< current hour) with no status
-    testHourKeys
-      .filter(hk => parseInt(hk, 10) < now.getHours())
-      .forEach(hk => {
-        const key = `test_${hk}`
-        if (!record?.routines?.[key]?.status) toMark.push(key)
-      })
-  } else {
-    // Regular mode: alarms > 120 min past with no status
-    settings.alarms
-      ?.filter(a => a.enabled && a.type && a.days.includes(todayDay))
-      .forEach(a => {
-        const [h, m] = a.time.split(':').map(Number)
-        if (nowMins - (h * 60 + m) > 120 && !record?.routines?.[a.type]?.status) {
-          toMark.push(a.type)
-        }
-      })
-  }
-
-  if (toMark.length === 0) return
-
+// 미실행 일괄 기록 (recordReconcile에서 사용). 비어 있는 칸에만 쓴다.
+// idsByDate: { 'yyyy-MM-dd': [alarmId, ...] }
+export function markRoutinesMissed(idsByDate) {
   const records = getRecords()
-  const rec = records[today] || {}
   const updatedAt = new Date().toISOString()
-  const routines = { ...rec.routines }
-  toMark.forEach(key => { routines[key] = { status: 'missed', updatedAt } })
-  records[today] = { ...rec, routines }
-  localStorage.setItem(keys().records, JSON.stringify(records))
+  let changed = false
+  for (const [dateKey, ids] of Object.entries(idsByDate)) {
+    const rec = records[dateKey] || {}
+    const routines = { ...rec.routines }
+    for (const id of ids) {
+      if (routines[id]?.status) continue
+      routines[id] = { status: 'missed', updatedAt }
+      changed = true
+    }
+    records[dateKey] = { ...rec, routines }
+  }
+  if (changed) localStorage.setItem(keys().records, JSON.stringify(records))
+}
+
+// --- 하루 알람 목록(계획) · 새 기록 규칙 적용 시작일 (recordReconcile에서 사용) ---
+// 알람 목록: { 'yyyy-MM-dd': [{ id, ringMin, deadlineMin, sinceMin }] }
+
+export function getAlarmPlans() {
+  try {
+    return JSON.parse(localStorage.getItem(keys().alarmPlans) || '{}')
+  } catch {
+    return {}
+  }
+}
+
+export function saveAlarmPlans(plans) {
+  localStorage.setItem(keys().alarmPlans, JSON.stringify(plans))
+}
+
+export function getRecordRulesSince() {
+  return localStorage.getItem(keys().recordRulesSince)
+}
+
+export function setRecordRulesSince(dateKey) {
+  localStorage.setItem(keys().recordRulesSince, dateKey)
 }
 
 // Returns a small sequential integer safe for use as a Capacitor notification ID
@@ -365,7 +380,7 @@ export function generateId() {
   return maxId + 1
 }
 
-// --- Data export / import ---
+// --- Data export ---
 
 export function exportAllData() {
   return {
@@ -377,10 +392,3 @@ export function exportAllData() {
   }
 }
 
-export function importAllData(data) {
-  if (!data || typeof data !== 'object') throw new Error('유효하지 않은 데이터입니다.')
-  const k = keys()
-  if (data.settings) localStorage.setItem(k.settings, JSON.stringify(data.settings))
-  if (data.records) localStorage.setItem(k.records, JSON.stringify(data.records))
-  if (data.notifLog) localStorage.setItem(k.notifLog, JSON.stringify(data.notifLog))
-}
