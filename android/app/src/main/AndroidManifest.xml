@@ -57,6 +57,25 @@
             android:name=".BoostAlarmReceiver"
             android:exported="false" />
 
+        <!-- ── 알람 재예약: 재부팅 · 앱 업데이트 · 시간/시간대 변경 · 매일 04:00(앱 내부 신호) ── -->
+        <!--
+            앱을 열지 않아도 강화알람과 일반·시간별 반복 알림을 다음 회차로 다시 예약한다.
+            Local Notifications 플러그인의 자체 복구 리시버도 부팅 신호를 받지만, 같은 알림 ID로
+            덮어쓰는 구조라 중복 예약되지 않는다.
+        -->
+        <receiver
+            android:name=".AlarmRestoreReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

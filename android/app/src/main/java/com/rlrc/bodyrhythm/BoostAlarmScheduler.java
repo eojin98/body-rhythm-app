@@ -26,6 +26,8 @@ class BoostAlarmScheduler {
     static final String ACTION_SNOOZE = "com.rlrc.bodyrhythm.BOOST_SNOOZE_";
     static final String ACTION_TIMER  = "com.rlrc.bodyrhythm.BOOST_TIMER_";
 
+    static final String EXTRA_TRIGGER_AT = "triggerAt";
+
     /** Schedule (or reschedule) a daily boost alarm for the given hour. */
     static void scheduleDaily(Context ctx, int hour) {
         Calendar cal = Calendar.getInstance();
@@ -57,6 +59,7 @@ class BoostAlarmScheduler {
         Intent intent = new Intent(ctx, BoostAlarmReceiver.class);
         intent.setAction(action);
         intent.putExtra("hour", hour);
+        intent.putExtra(EXTRA_TRIGGER_AT, triggerAtMs);   // 늦게 도착한 알람 판별용 (BoostAlarmReceiver)
 
         PendingIntent pi = PendingIntent.getBroadcast(
             ctx, requestCode, intent,

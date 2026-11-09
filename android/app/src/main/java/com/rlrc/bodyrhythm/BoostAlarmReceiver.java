@@ -25,6 +25,8 @@ public class BoostAlarmReceiver extends BroadcastReceiver {
     private static final String TAG            = "BoostAlarmReceiver";
     private static final int    MAX_SNOOZE     = 2;
     private static final long   SNOOZE_DELAY   = 5 * 60 * 1000L; // 5 min
+    /** 예약 시각보다 이만큼 넘게 늦게 도착하면(시간을 앞으로 바꾼 경우 등) 울리지 않는다 */
+    private static final long   STALE_MS       = 30 * 60 * 1000L; // 30 min
 
     @Override
     public void onReceive(Context context, Intent intent) {
@@ -38,6 +40,12 @@ public class BoostAlarmReceiver extends BroadcastReceiver {
         }
 
         Log.d(TAG, "onReceive action=" + action + " hour=" + hour);
+
+        if (isStale(intent, action)) {
+            Log.w(TAG, "Stale alarm ignored: action=" + action + " hour=" + hour);
+            if (action.startsWith(BoostAlarmScheduler.ACTION_DAILY)) BoostAlarmScheduler.scheduleDaily(context, hour);
+            return;
+        }
 
         if (action.startsWith(BoostAlarmScheduler.ACTION_DAILY)) {
             // New occurrence: generate unique ID from first-fire timestamp
@@ -89,6 +97,13 @@ public class BoostAlarmReceiver extends BroadcastReceiver {
             BoostAlarmPlugin.savePendingAction(context, hour, "done");
             stopAlarmService(context);
         }
+    }
+
+    /** 예약 시각이 담긴 일일·스누즈 알람이 STALE_MS 넘게 늦게 도착했는지. 예전에 예약된 알람(값 없음)은 그대로 울린다. */
+    private boolean isStale(Intent intent, String action) {
+        if (!action.startsWith(BoostAlarmScheduler.ACTION_DAILY) && !action.startsWith(BoostAlarmScheduler.ACTION_SNOOZE)) return false;
+        long triggerAt = intent.getLongExtra(BoostAlarmScheduler.EXTRA_TRIGGER_AT, 0L);
+        return triggerAt > 0 && System.currentTimeMillis() - triggerAt > STALE_MS;
     }
 
     private void startAlarmService(Context context, int hour) {

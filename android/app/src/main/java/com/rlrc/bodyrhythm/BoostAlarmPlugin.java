@@ -20,7 +20,9 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 
 @CapacitorPlugin(name = "BoostAlarm")
@@ -30,6 +32,8 @@ public class BoostAlarmPlugin extends Plugin {
 
     static final String PREFS_NAME         = "boost_alarm_prefs";
     static final String KEY_PENDING_ACTIONS = "pending_actions";
+    /** 강화모드 시간 목록 (예: "7,9,12"). 앱을 열지 않고 다시 예약할 때(AlarmRestorer) 쓴다. */
+    static final String KEY_BOOST_HOURS     = "boost_hours";
 
     // ─── Occurrence status constants (mirrors JS AlarmOccurrenceStatus) ──────────
     static final String STATUS_SCHEDULED     = "SCHEDULED";
@@ -56,9 +60,16 @@ public class BoostAlarmPlugin extends Plugin {
         BoostAlarmScheduler.cancelDailyAndSnoozeAll(getContext());
 
         try {
+            StringBuilder saved = new StringBuilder();
             for (int i = 0; i < hoursArr.length(); i++) {
-                BoostAlarmScheduler.scheduleDaily(getContext(), hoursArr.getInt(i));
+                int hour = hoursArr.getInt(i);
+                BoostAlarmScheduler.scheduleDaily(getContext(), hour);
+                if (saved.length() > 0) saved.append(',');
+                saved.append(hour);
             }
+            getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit().putString(KEY_BOOST_HOURS, saved.toString()).apply();
+            AlarmRestorer.scheduleMaintenance(getContext());
             Log.d(TAG, "Scheduled " + hoursArr.length() + " boost alarms");
         } catch (Exception e) {
             Log.e(TAG, "scheduleAlarms error: " + e.getMessage());
@@ -73,7 +84,23 @@ public class BoostAlarmPlugin extends Plugin {
     @PluginMethod
     public void cancelAll(PluginCall call) {
         BoostAlarmScheduler.cancelAll(getContext());
+        getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().remove(KEY_BOOST_HOURS).apply();
         if (call != null) call.resolve();
+    }
+
+    /** scheduleAlarms()가 저장한 강화모드 시간 목록. 없으면 빈 목록. */
+    static List<Integer> getSavedBoostHours(Context ctx) {
+        List<Integer> hours = new ArrayList<>();
+        String saved = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(KEY_BOOST_HOURS, "");
+        if (saved == null || saved.isEmpty()) return hours;
+        for (String s : saved.split(",")) {
+            try {
+                int h = Integer.parseInt(s.trim());
+                if (h >= 0 && h <= 23) hours.add(h);
+            } catch (NumberFormatException ignored) {}
+        }
+        return hours;
     }
 
     // ─── Pending actions (done/skipped recorded while app was dead) ───────────────
