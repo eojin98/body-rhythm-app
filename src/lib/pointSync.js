@@ -126,22 +126,3 @@ export async function syncFromServer(userId) {
     console.warn('[syncFromServer] exception:', e)
   }
 }
-
-// ─── 개발/검증용 ───────────────────────────────────────────────────────────────
-
-/** 서버에 저장된 포인트 합계. 실패 시 null 반환. */
-export async function getServerTotalPoints() {
-  try {
-    const { data: sessionData } = await supabase.auth.getSession()
-    const userId = sessionData?.session?.user?.id
-    if (!userId) return null
-    const { data } = await supabase
-      .from('user_point_balances')
-      .select('total_points')
-      .eq('user_id', userId)
-      .single()
-    return data?.total_points ?? null
-  } catch {
-    return null
-  }
-}

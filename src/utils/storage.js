@@ -1,3 +1,4 @@
+// 설정 마이그레이션 키 (migrateSettings). 화면 표시용 버전은 utils/appInfo.js — 이 값은 앱 버전과 맞추지 않는다
 export const APP_VERSION = '1.1.0'
 
 const DEVICE_ID_KEY = 'bodyrhythm_device_id'

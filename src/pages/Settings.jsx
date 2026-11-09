@@ -2,9 +2,9 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
 import { useAuth } from '../context/AuthContext'
-import { getSettings, saveSettings, DAY_NAMES, APP_VERSION, exportAllData } from '../utils/storage'
-import { clearLedger, getAllEntries, getUnsyncedEntries } from '../utils/pointLedger'
-import { getServerTotalPoints, syncPointsToServer, syncFromServer } from '../lib/pointSync'
+import { getSettings, saveSettings, DAY_NAMES, exportAllData } from '../utils/storage'
+import { getDisplayVersion, WEB_VERSION } from '../utils/appInfo'
+import { openExternal } from '../utils/externalLink'
 import {
   getPermissionStatus,
   checkPermissionStatusAsync,
@@ -22,21 +22,19 @@ import {
   checkFullScreenIntentPermission,
   openFullScreenIntentSettings,
   openAppNotificationSettings,
-  scheduleTestBoostAlarm,
   checkOverlayPermission,
   openOverlaySettings,
 } from '../utils/boostAlarm'
 import { ALARM_PERIODS, PERIOD_ORDER, getEffectiveBehaviors } from '../utils/alarmContent'
 
-function fmtSyncTime(isoStr) {
-  if (!isoStr) return '없음'
-  try {
-    const d = new Date(isoStr)
-    const hh = String(d.getHours()).padStart(2, '0')
-    const mm = String(d.getMinutes()).padStart(2, '0')
-    const ss = String(d.getSeconds()).padStart(2, '0')
-    return `${d.getMonth() + 1}/${d.getDate()} ${hh}:${mm}:${ss}`
-  } catch { return '?' }
+const CONTACT_EMAIL = 'rladjwls916@korea.ac.kr'
+const PRIVACY_POLICY_URL = 'https://luminous-texture-75d.notion.site/4052dab6e90581e29ea6d689d0b816af?pvs=74'
+const infoLinkStyle = { color: '#6C5CE7', fontWeight: 600, textDecoration: 'none' }
+
+// 기본 동작(WebView 안 이동)을 막고 메일 앱·기본 브라우저로 연다
+function openInfoLink(e, url, failMessage) {
+  e.preventDefault()
+  openExternal(url).then(ok => { if (!ok) alert(failMessage) })
 }
 
 export default function Settings() {
@@ -48,18 +46,7 @@ export default function Settings() {
   const [exactAlarmOk, setExactAlarmOk] = useState(true)
   const [fsiGranted, setFsiGranted] = useState(true)
   const [overlayGranted, setOverlayGranted] = useState(true)
-  const [testAlarmFiring, setTestAlarmFiring] = useState(false)
-  const [showPointResetConfirm, setShowPointResetConfirm] = useState(false)
-  const [serverPoints, setServerPoints] = useState(null)
-  const [serverPointsLoading, setServerPointsLoading] = useState(false)
-  const [syncResult, setSyncResult] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('lastSyncResult') || 'null') } catch { return null }
-  })
-  const [manualSyncing, setManualSyncing] = useState(false)
-  const [ledgerStats, setLedgerStats] = useState(() => ({
-    total: getAllEntries().length,
-    unsynced: getUnsyncedEntries().length,
-  }))
+  const [appVersion, setAppVersion] = useState(WEB_VERSION)
 
   useEffect(() => {
     checkPermissionStatusAsync().then(setNotifStatus)
@@ -69,6 +56,7 @@ export default function Settings() {
       checkFullScreenIntentPermission().then(({ granted }) => setFsiGranted(granted))
       checkOverlayPermission().then(({ granted }) => setOverlayGranted(granted))
     }
+    getDisplayVersion().then(setAppVersion)
   }, [])
 
   // Re-check OS notification permission and FSI/overlay permissions when returning from system settings
@@ -84,35 +72,6 @@ export default function Settings() {
     document.addEventListener('visibilitychange', onVisible)
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [])
-
-  // 동기화 결과·원장 건수 자동 갱신
-  useEffect(() => {
-    const onSyncComplete = () => {
-      try { setSyncResult(JSON.parse(localStorage.getItem('lastSyncResult') || 'null')) } catch {}
-    }
-    const onLedgerChange = () => {
-      setLedgerStats({ total: getAllEntries().length, unsynced: getUnsyncedEntries().length })
-    }
-    window.addEventListener('bodyrhythm:syncComplete', onSyncComplete)
-    window.addEventListener('bodyrhythm:ledgerUpdated', onLedgerChange)
-    window.addEventListener('bodyrhythm:pointRecorded', onLedgerChange)
-    return () => {
-      window.removeEventListener('bodyrhythm:syncComplete', onSyncComplete)
-      window.removeEventListener('bodyrhythm:ledgerUpdated', onLedgerChange)
-      window.removeEventListener('bodyrhythm:pointRecorded', onLedgerChange)
-    }
-  }, [])
-
-  const handleManualSync = async () => {
-    if (manualSyncing || !user) return
-    setManualSyncing(true)
-    try {
-      await syncFromServer(user.id)
-      await syncPointsToServer()
-    } finally {
-      setManualSyncing(false)
-    }
-  }
 
   const persistSettings = (updated) => {
     saveSettings(updated)
@@ -401,35 +360,6 @@ export default function Settings() {
               ⚠️ 앱이 열려 있을 때 매 정시마다 팝업과 알림이 표시됩니다.
             </div>
           )}
-          {settings.testMode && Capacitor.isNativePlatform() && (
-            <button
-              onClick={async () => {
-                if (testAlarmFiring) return
-                setTestAlarmFiring(true)
-                try {
-                  await scheduleTestBoostAlarm(5000)
-                  setTimeout(() => setTestAlarmFiring(false), 6000)
-                } catch (e) {
-                  alert('테스트 알람 예약 실패: ' + (e?.message || e))
-                  setTestAlarmFiring(false)
-                }
-              }}
-              style={{
-                marginTop: 10,
-                width: '100%',
-                background: testAlarmFiring ? '#B09FE8' : '#6C5CE7',
-                color: 'white',
-                border: 'none',
-                borderRadius: 12,
-                padding: '12px',
-                fontSize: 14,
-                fontWeight: 700,
-                cursor: testAlarmFiring ? 'not-allowed' : 'pointer',
-              }}
-            >
-              {testAlarmFiring ? '⏱️ 5초 후 강화 알람 발사 중...' : '🔥 강화모드 테스트 (5초 후 알람)'}
-            </button>
-          )}
         </div>
       </div>
 
@@ -488,108 +418,6 @@ export default function Settings() {
         </div>
       </div>
 
-      {/* TODO: 배포 전 제거 — 개발용 도구 */}
-      <div className="section">
-        <div className="section-title">개발자 도구</div>
-        <div className="card card-body">
-          {/* ── 동기화 상태 ── */}
-          <div style={{ background: '#F5F4FF', borderRadius: 10, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#6C5CE7', marginBottom: 2 }}>동기화 상태</div>
-            {[
-              ['계정', user ? user.email : '로그아웃'],
-              ['마지막 동기화', fmtSyncTime(syncResult?.at)],
-              ['로컬 원장', `총 ${ledgerStats.total}건 / 미동기화 ${ledgerStats.unsynced}건`],
-            ].map(([label, value]) => (
-              <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#6E6E8A' }}>
-                <span>{label}</span>
-                <span style={{ color: '#1E1E2E', fontWeight: 600, textAlign: 'right', maxWidth: '65%', wordBreak: 'break-all' }}>{value}</span>
-              </div>
-            ))}
-            {syncResult && (
-              <div style={{ fontSize: 12, textAlign: 'right', fontWeight: 600, color: syncResult.ok ? '#00B894' : '#FF7675' }}>
-                {syncResult.ok
-                  ? `성공 (올림 ${syncResult.pushed}건, 받음 ${syncResult.pulled}건)`
-                  : `실패: ${syncResult.error || '알 수 없는 오류'}`}
-              </div>
-            )}
-            <button
-              onClick={handleManualSync}
-              disabled={manualSyncing || !user}
-              style={{
-                marginTop: 4, width: '100%', padding: '10px', borderRadius: 10, border: 'none',
-                background: (manualSyncing || !user) ? '#E0DEFF' : 'linear-gradient(135deg, #6C5CE7, #A29BFE)',
-                color: (manualSyncing || !user) ? '#A0A0B8' : '#fff',
-                fontWeight: 600, fontSize: 13, cursor: (manualSyncing || !user) ? 'not-allowed' : 'pointer',
-                fontFamily: 'inherit',
-              }}
-            >
-              {manualSyncing ? '동기화 중…' : '↑↓ 지금 동기화'}
-            </button>
-          </div>
-
-          {/* 서버 포인트 확인 */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <button
-              onClick={async () => {
-                setServerPointsLoading(true)
-                const pts = await getServerTotalPoints()
-                setServerPoints(pts)
-                setServerPointsLoading(false)
-              }}
-              style={{
-                flex: 1, padding: '12px', borderRadius: 12, border: 'none',
-                background: '#EDE9FF', color: '#6C5CE7', fontWeight: 600,
-                fontSize: 14, cursor: 'pointer',
-              }}
-            >
-              {serverPointsLoading ? '조회 중…' : '☁ 서버 포인트 확인'}
-            </button>
-            {serverPoints !== null && (
-              <div style={{ fontSize: 14, fontWeight: 700, color: '#6C5CE7', whiteSpace: 'nowrap' }}>
-                {serverPoints}P
-              </div>
-            )}
-          </div>
-
-          {!showPointResetConfirm ? (
-            <button
-              onClick={() => setShowPointResetConfirm(true)}
-              style={{
-                width: '100%', padding: '12px', borderRadius: 12, border: 'none',
-                background: '#FFF0F0', color: '#FF7675', fontWeight: 600,
-                fontSize: 14, cursor: 'pointer',
-              }}
-            >
-              🗑 포인트 원장 초기화
-            </button>
-          ) : (
-            <div>
-              <div style={{ fontSize: 13, color: '#666', marginBottom: 10, lineHeight: 1.5 }}>
-                포인트 내역이 전부 삭제됩니다. 되돌릴 수 없어요.
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  onClick={() => setShowPointResetConfirm(false)}
-                  style={{
-                    flex: 1, padding: '10px', borderRadius: 10, border: '1.5px solid #E0DEFF',
-                    background: '#F5F4FF', color: '#6C5CE7', fontWeight: 600,
-                    fontSize: 14, cursor: 'pointer',
-                  }}
-                >취소</button>
-                <button
-                  onClick={() => { clearLedger(); setShowPointResetConfirm(false) }}
-                  style={{
-                    flex: 1, padding: '10px', borderRadius: 10, border: 'none',
-                    background: '#FF7675', color: '#fff', fontWeight: 600,
-                    fontSize: 14, cursor: 'pointer',
-                  }}
-                >초기화</button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
       {/* Account */}
       <div className="section">
         <div className="section-title">계정</div>
@@ -628,9 +456,36 @@ export default function Settings() {
       <div className="section" style={{ paddingBottom: 20 }}>
         <div className="section-title">앱 정보</div>
         <div className="card card-body" style={{ color: '#A0A0B8', fontSize: 13, lineHeight: 2 }}>
-          <div className="row-between"><span>버전</span><span>{APP_VERSION}</span></div>
-          <div className="row-between"><span>데이터 저장</span><span>기기 로컬</span></div>
+          <div className="row-between"><span>버전</span><span>{appVersion}</span></div>
+          <div className="row-between"><span>운영 주체</span><span>RLRC 센터</span></div>
+          <div className="row-between">
+            <span>문의</span>
+            <a
+              href={`mailto:${CONTACT_EMAIL}`}
+              onClick={e => openInfoLink(e, `mailto:${CONTACT_EMAIL}`, `메일 앱을 찾을 수 없어요.
+${CONTACT_EMAIL} 로 문의해 주세요.`)}
+              style={infoLinkStyle}
+            >
+              {CONTACT_EMAIL}
+            </a>
+          </div>
+          <div className="row-between">
+            <span>개인정보처리방침</span>
+            <a
+              href={PRIVACY_POLICY_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={e => openInfoLink(e, PRIVACY_POLICY_URL, `브라우저를 열 수 없어요.
+${PRIVACY_POLICY_URL}`)}
+              style={infoLinkStyle}
+            >
+              보기 ›
+            </a>
+          </div>
           <div className="row-between"><span>알람 방식</span><span>{Capacitor.isNativePlatform() ? '로컬 알림 (앱)' : '브라우저 알림'}</span></div>
+          <div style={{ marginTop: 6, paddingTop: 8, borderTop: '1px solid #F0F0F5', fontSize: 12, lineHeight: 1.6 }}>
+            알람 기록은 기기에, 포인트·프로필·랭킹은 서버에 저장됩니다
+          </div>
         </div>
       </div>
     </div>

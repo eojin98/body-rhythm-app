@@ -1,7 +1,7 @@
 {
   "name": "body-rhythm-alarm",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.6.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,6 +13,7 @@
   "dependencies": {
     "@capacitor/android": "^8.2.0",
     "@capacitor/app": "^8.1.0",
+    "@capacitor/app-launcher": "^8.0.1",
     "@capacitor/cli": "^8.2.0",
     "@capacitor/core": "^8.2.0",
     "@capacitor/local-notifications": "^8.0.2",

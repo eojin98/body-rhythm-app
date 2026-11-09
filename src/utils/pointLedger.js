@@ -244,36 +244,6 @@ export function getEntriesByDate(dateKey) {
     .sort(byOccurrenceDesc)
 }
 
-/** 원장 전체 삭제 (개발용) */
-export function clearLedger() {
-  const key = ledgerKey()
-  if (key) localStorage.removeItem(key)
-}
-
-/**
- * 완료 취소(clear) 시 해당 알람의 포인트 원장 항목을 함께 제거한다.
- * 이미 서버에 동기화된(synced:true) 항목도 로컬에서는 제거하되, 서버 데이터는 건드리지 않는다
- * (서버 삭제 API를 호출하지 않음) — 대신 콘솔에 남겨 추후 추적할 수 있게 한다.
- */
-export function removeEntriesForAlarm(date, alarmId) {
-  const ledger = getLedger()
-  const toRemove = ledger.filter(e => e.date === date && e.alarmId === alarmId)
-  if (toRemove.length === 0) return
-
-  const stillSyncedOnServer = toRemove.filter(e => e.synced)
-  if (stillSyncedOnServer.length > 0) {
-    console.warn(
-      '[pointLedger] removeEntriesForAlarm: 서버에 이미 동기화된 항목을 로컬에서만 제거합니다 (서버는 변경하지 않음):',
-      stillSyncedOnServer.map(e => ({ id: e.id, occurrenceId: e.occurrenceId, date: e.date, alarmId: e.alarmId })),
-    )
-  }
-
-  const remaining = ledger.filter(e => !(e.date === date && e.alarmId === alarmId))
-  saveLedger(remaining)
-
-  try { window.dispatchEvent(new CustomEvent('bodyrhythm:ledgerUpdated')) } catch {}
-}
-
 // ─── Server merge (pointSync.js에서 사용) ─────────────────────────────────────
 
 /**

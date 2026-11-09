@@ -1,6 +1,5 @@
 package com.rlrc.bodyrhythm;
 
-import android.app.AlarmManager;
 import android.app.NotificationManager;
 import android.content.Context;
 import android.content.Intent;
@@ -75,30 +74,6 @@ public class BoostAlarmPlugin extends Plugin {
     public void cancelAll(PluginCall call) {
         BoostAlarmScheduler.cancelAll(getContext());
         if (call != null) call.resolve();
-    }
-
-    /**
-     * JS → scheduleTestAlarm({ delayMs: 5000 })
-     * Fires a one-shot boost alarm N ms from now (default 5 s) for dev/testing.
-     * Uses hour=12 (noon) so the behavior title and time label render correctly.
-     * Reuses the snooze slot — will not reschedule itself.
-     */
-    @PluginMethod
-    public void scheduleTestAlarm(PluginCall call) {
-        int delayMs = call.getInt("delayMs", 5000);
-        Context ctx = getContext();
-        AlarmManager am = (AlarmManager) ctx.getSystemService(Context.ALARM_SERVICE);
-        if (am == null) {
-            call.reject("AlarmManager not available");
-            return;
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !am.canScheduleExactAlarms()) {
-            call.reject("SCHEDULE_EXACT_ALARM permission not granted");
-            return;
-        }
-        BoostAlarmScheduler.scheduleSnooze(ctx, 12, delayMs);
-        Log.d(TAG, "scheduleTestAlarm: fires in " + delayMs + " ms (hour=12)");
-        call.resolve();
     }
 
     // ─── Pending actions (done/skipped recorded while app was dead) ───────────────
